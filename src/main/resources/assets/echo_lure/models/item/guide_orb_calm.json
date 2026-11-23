@@ -1,0 +1,6 @@
+{
+  "parent": "echo_lure:item/guide_orb_base",
+  "textures": {
+    "layer0": "echo_lure:item/guide_orb_calm"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "echo_lure",
+  "version": "1.0.4",
+  "name": "Echo Lure",
+  "description": "A floating golden guide whose signal changes over time.",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.echolure.EchoLure"],
+    "client": ["dev.echolure.EchoLureClient"]
+  },
+  "mixins": ["echo_lure.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "26.3",
+    "java": ">=25",
+    "fabric-api": ">=0.166.2"
+  }
+}

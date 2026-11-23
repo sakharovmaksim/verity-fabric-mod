@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "dev.echolure.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["GuideInteractionMixin"],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
