@@ -10,7 +10,7 @@ import net.minecraft.world.level.block.Blocks;
 
 final class Dialogue {
     private static final int ORE_RADIUS = 16;
-    private static final Pattern CHAT_PREFIX = Pattern.compile("(?iu)^\\s*(?:отблеск|echo|verity)\\s*[:,]\\s*(.*)$");
+    private static final Pattern CHAT_PREFIX = Pattern.compile("(?iu)^\\s*(?:ж[её]лтый\\s+шарик|yellow|verity)\\s*[:,]\\s*(.*)$");
     private static final Pattern MATH = Pattern.compile("(-?\\d{1,7})\\s*([+*/×÷-])\\s*(-?\\d{1,7})[?=]?");
 
     private Dialogue() {}
@@ -27,7 +27,7 @@ final class Dialogue {
 
         String query = question.strip().toLowerCase(Locale.ROOT).replace('ё', 'е');
         String reply = help(player, query);
-        return phase == Progress.Phase.STATIC ? "…ш-ш… " + reply : reply;
+        return reply != null && phase == Progress.Phase.STATIC ? "…ш-ш… " + reply : reply;
     }
 
     private static String help(ServerPlayer player, String query) {
@@ -57,7 +57,8 @@ final class Dialogue {
         if (query.contains("ночь") || query.contains("время") || query.contains("time")) {
             return player.level().isDarkOutside() ? "Снаружи темно." : "Сейчас ещё светло.";
         }
-        return "Спроси про алмазы, железо, координаты или время. Могу посчитать, например, 17 * 6.";
+        if (query.isEmpty()) return "Напиши «verity: привет!» — поговорим. Также понимаю «Желтый шарик:» и «yellow:».";
+        return null;
     }
 
     private static String oreHint(ServerPlayer player, Block ore, Block deepOre, String fallback) {

@@ -27,6 +27,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
@@ -38,6 +39,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.phys.Vec3;
 
@@ -49,11 +51,28 @@ final class Actors {
     static final EntityType<Watcher> WATCHER = Registry.register(BuiltInRegistries.ENTITY_TYPE, WATCHER_KEY,
         EntityType.Builder.<Watcher>of(Watcher::new, MobCategory.MONSTER).sized(0.65f, 2.23f).eyeHeight(1.96f)
             .clientTrackingRange(8).noSave().noSummon().build(WATCHER_KEY));
+    private static final ResourceKey<EntityType<?>> BOX_KEY = ResourceKey.create(Registries.ENTITY_TYPE,
+        Identifier.fromNamespaceAndPath("echo_lure", "arrival_box"));
+    static final EntityType<ArrivalBox> BOX = Registry.register(BuiltInRegistries.ENTITY_TYPE, BOX_KEY,
+        EntityType.Builder.<ArrivalBox>of(ArrivalBox::new, MobCategory.MISC).sized(0.8f, 0.65f)
+            .clientTrackingRange(8).noSave().noSummon().build(BOX_KEY));
 
     private Actors() {}
 
     static void register() {
         FabricDefaultAttributeRegistry.register(WATCHER, Zombie.createAttributes());
+        FabricDefaultAttributeRegistry.register(BOX, Mob.createMobAttributes());
+    }
+
+    static boolean spawnBox(ArrivalBox box, ServerPlayer player) {
+        double heading = Math.atan2(player.getLookAngle().z, player.getLookAngle().x);
+        for (int attempt = 0; attempt < 16; attempt++) {
+            double angle = heading + attempt * Math.PI / 8;
+            BlockPos at = BlockPos.containing(player.getX() + 2.5 * Math.cos(angle),
+                player.getY(), player.getZ() + 2.5 * Math.sin(angle));
+            if (spawnGroundedAt(box, player.level(), at)) return true;
+        }
+        return false;
     }
 
     static boolean spawn(Mob actor, ServerPlayer player, boolean grounded) {
@@ -105,12 +124,93 @@ final class Actors {
         private Face reaction;
         private int reactionUntil;
         private int blinkAt = 45;
+        private Vec3 emergenceOrigin;
+        private int emergenceStart;
+        private ServerPlayer carrier;
+        private int flightTicks;
+        private int recoveryTicks;
+
+        private void setCarrier(ServerPlayer player) {
+            if (carrier == player) return;
+            if (carrier != null) CarryState.send(carrier, false);
+            carrier = player;
+            if (carrier != null) CarryState.send(carrier, true);
+        }
+
+        boolean isCarriedBy(ServerPlayer player) {
+            return carrier == player;
+        }
+
+        boolean take(ServerPlayer player) {
+            if (!belongsTo(player) || idleFace == Face.ANGRY || distanceToSqr(player) > 9
+                || !player.hasLineOfSight(this)) return false;
+            emergenceOrigin = null;
+            setCarrier(player);
+            flightTicks = 0;
+            recoveryTicks = 0;
+            getNavigation().stop();
+            setDeltaMovement(Vec3.ZERO);
+            react(Face.STARTLED, 16);
+            return true;
+        }
+
+        void throwFrom(ServerPlayer player) {
+            if (!isCarriedBy(player)) return;
+            setCarrier(null);
+            flightTicks = 100;
+            setDeltaMovement(player.getLookAngle().scale(1.15).add(0, 0.12, 0));
+            needsSync = true;
+            react(Face.STARTLED, 50);
+        }
+
+        boolean thrownIntoLava() {
+            return flightTicks > 0 && isInLava();
+        }
+
+        private void updateHandling() {
+            if (carrier != null) {
+                if (!carrier.isAlive() || carrier.level() != level() || carrier.isSpectator()) {
+                    setCarrier(null);
+                    return;
+                }
+                Vec3 eye = carrier.getEyePosition();
+                Vec3 wanted = eye.add(carrier.getLookAngle().scale(1.15));
+                Vec3 hit = level().clip(new ClipContext(eye, wanted, ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE, carrier)).getLocation();
+                Vec3 center = hit.subtract(carrier.getLookAngle().scale(0.3));
+                setPos(center.add(0, -getBbHeight() * 0.55, 0));
+                setDeltaMovement(Vec3.ZERO);
+            } else if (flightTicks > 0) {
+                flightTicks--;
+                Vec3 velocity = getDeltaMovement().add(0, -0.04, 0);
+                move(MoverType.SELF, velocity);
+                setDeltaMovement(new Vec3(horizontalCollision ? 0 : velocity.x,
+                    verticalCollision ? 0 : velocity.y, horizontalCollision ? 0 : velocity.z)
+                    .scale(isInWater() || isInLava() ? 0.8 : onGround() ? 0.7 : 0.99));
+                if (flightTicks == 0) {
+                    setDeltaMovement(Vec3.ZERO);
+                    // Allay navigation avoids lava and cannot plan a route out from inside it.
+                    recoveryTicks = isInLava() ? 30 : 0;
+                    clearFire();
+                }
+            } else if (recoveryTicks > 0) {
+                recoveryTicks--;
+                move(MoverType.SELF, new Vec3(0, 0.12, 0));
+                setDeltaMovement(Vec3.ZERO);
+                clearFire();
+            }
+        }
+
+        @Override
+        public void travel(Vec3 input) {
+            if (carrier == null && flightTicks == 0 && recoveryTicks == 0) super.travel(input);
+        }
 
         Guide(ServerPlayer player, boolean uneasy) {
             super(EntityTypes.ALLAY, player.level());
             owner = player.getUUID();
             idleFace = uneasy ? Face.UNEASY : Face.CALM;
-            setCustomName(Component.translatableWithFallback(EchoLure.GUIDE_NAME_KEY, "Отблеск"));
+            setCustomName(Component.translatableWithFallback(EchoLure.GUIDE_NAME_KEY, "Желтый шарик"));
             addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, MobEffectInstance.INFINITE_DURATION,
                 0, false, false, false));
             setPersistenceRequired();
@@ -133,7 +233,18 @@ final class Actors {
             return orb != null && !orb.isRemoved();
         }
 
+        boolean emergeFrom(ArrivalBox box) {
+            emergenceOrigin = box.position();
+            emergenceStart = tickCount;
+            snapTo(emergenceOrigin.add(0, 0.1, 0));
+            var level = (ServerLevel) level();
+            return level.noCollision(this) && level.addFreshEntity(this);
+        }
+
         void enrage() {
+            setCarrier(null);
+            flightTicks = 0;
+            recoveryTicks = 0;
             idleFace = Face.ANGRY;
             reactionUntil = 0;
             if (hasOrb()) orb.show(Face.ANGRY);
@@ -153,6 +264,14 @@ final class Actors {
         @Override
         public void tick() {
             super.tick();
+            updateHandling();
+            if (emergenceOrigin != null) {
+                double progress = Math.clamp((tickCount - emergenceStart) / 40.0, 0, 1);
+                double height = progress * progress * (3 - 2 * progress);
+                setDeltaMovement(Vec3.ZERO);
+                setPos(emergenceOrigin.add(0, 0.1 + height, 0));
+                if (progress >= 1) emergenceOrigin = null;
+            }
             if (!hasOrb()) return;
             orb.setPos(orbCenter());
             if (idleFace == Face.ANGRY) return;
@@ -171,6 +290,7 @@ final class Actors {
 
         @Override
         public void remove(RemovalReason reason) {
+            setCarrier(null);
             if (hasOrb()) orb.discard();
             super.remove(reason);
         }
@@ -181,6 +301,7 @@ final class Actors {
 
         void follow(ServerPlayer player) {
             getLookControl().setLookAt(player, 30, 30);
+            if (emergenceOrigin != null || carrier != null || flightTicks > 0 || recoveryTicks > 0) return;
             if (distanceToSqr(player) > 9) {
                 getNavigation().moveTo(player.getX(), player.getEyeY(), player.getZ(), 1.25);
             } else {

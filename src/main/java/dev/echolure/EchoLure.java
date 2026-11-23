@@ -1,9 +1,12 @@
 package dev.echolure;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -18,6 +21,7 @@ import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -52,12 +56,13 @@ public final class EchoLure implements ModInitializer {
     @Override
     public void onInitialize() {
         Actors.register();
+        PayloadTypeRegistry.clientboundPlay().register(CarryState.TYPE, CarryState.CODEC);
         progressType = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "progress"),
             builder -> builder.persistent(Progress.CODEC).copyOnDeath());
         CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) -> dispatcher.register(commands()));
         ServerTickEvents.END_SERVER_TICK.register(this::tick);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            for (Session session : sessions.values()) session.clearActor();
+            for (Session session : sessions.values()) session.close();
             sessions.clear();
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> clearSession(handler.player));
@@ -106,24 +111,27 @@ public final class EchoLure implements ModInitializer {
                 Progress next = Progress.demo(phase);
                 store(player, next);
                 reply(player, "Пробная фаза — " + phase.label + ".");
-                if (active(player)) session(player).update(next.phase());
+                if (active(player)) session(player).update(next);
                 return 1;
             }));
         }
-        return Commands.literal("echo")
+        return Commands.literal("yellow")
+            .then(Commands.literal("throw").executes(context -> handleGuide(
+                context.getSource().getPlayerOrException())))
             .then(Commands.literal("status").executes(context -> {
                 ServerPlayer player = context.getSource().getPlayerOrException();
                 Progress progress = progress(player);
                 reply(player, progress.enabled()
                     ? "%s · %d:%02d · доверие %+d".formatted(
                         progress.phase().label, progress.seconds() / 60, progress.seconds() % 60, progress.trust())
-                    : "Сигнал отключён. /echo start начнёт историю заново.");
+                        + " · " + AngerBar.label(progress)
+                    : "Сигнал отключён. /yellow start начнёт историю заново.");
                 return 1;
             }))
             .then(Commands.literal("start").executes(context -> {
                 ServerPlayer player = context.getSource().getPlayerOrException();
                 if (progress(player).enabled()) {
-                    reply(player, "Сигнал уже включён. /echo status покажет текущую фазу.");
+                    reply(player, "Сигнал уже включён. /yellow status покажет текущую фазу.");
                     return 0;
                 }
                 clearSession(player);
@@ -135,7 +143,7 @@ public final class EchoLure implements ModInitializer {
                 ServerPlayer player = context.getSource().getPlayerOrException();
                 clearSession(player);
                 Progress progress = progress(player);
-                store(player, new Progress(false, progress.seconds(), progress.trust(), progress.retaliation()));
+                store(player, progress.withEnabled(false));
                 reply(player, "Сигнал отключён.");
                 return 1;
             }))
@@ -153,10 +161,25 @@ public final class EchoLure implements ModInitializer {
                 continue;
             }
             Progress previous = progress(player);
+            Session session = session(player);
+            if (session.actor instanceof Actors.Guide guide && guide.thrownIntoLava()) {
+                guide.react(Actors.Face.STARTLED, 30);
+                if (session.mayChangeTrust() && storeTrust(player, -2)) {
+                    reply(player, "Горячо! Вытащи меня из лавы!");
+                    sound(player, SoundEvents.FIRE_EXTINGUISH, 0.8f, 1.2f);
+                }
+                previous = progress(player);
+            }
+            if (previous.phase() == Progress.Phase.WAITING && !session.prepareArrival()) continue;
             Progress next = previous.advance();
             if (next != previous) store(player, next);
-            if (next.phase() != previous.phase()) announce(player, next.phase());
-            session(player).update(next.phase());
+            if (previous.phase() == Progress.Phase.HUNT && next.phase() != Progress.Phase.HUNT) {
+                reply(player, "Я успокоился. Давай попробуем ещё раз.");
+                sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.8f, 1.2f);
+            } else if (next.phase() != previous.phase()) {
+                announce(player, next.phase());
+            }
+            session.update(next);
         }
     }
 
@@ -169,7 +192,7 @@ public final class EchoLure implements ModInitializer {
         Progress progress = progress(player);
         if (!active(player) || progress.phase() == Progress.Phase.WAITING) {
             reply(player, progress.enabled() ? "Связь пока недоступна в этом месте или в этой фазе."
-                : "Сигнал отключён. Включить снова — /echo start.");
+                : "Сигнал отключён. Включить снова — /yellow start.");
             return 0;
         }
         Session session = session(player);
@@ -177,14 +200,55 @@ public final class EchoLure implements ModInitializer {
             reply(player, "Дай сигналу несколько секунд.");
             return 0;
         }
+        if (question.length() > 500) {
+            reply(player, "Задай вопрос покороче — до 500 символов.");
+            return 0;
+        }
         session.nextQuestion = session.age + 5;
-        if (session.actor instanceof Actors.Guide guide) guide.react(Actors.Face.SPEAKING, 28);
-        reply(player, Dialogue.answer(player, question, progress.phase()));
+        String answer = Dialogue.answer(player, question, progress.phase());
+        if (answer != null) {
+            speak(player, session, answer);
+            return 1;
+        }
+        if (session.pending != null) {
+            reply(player, "Я ещё обдумываю предыдущий вопрос.");
+            return 0;
+        }
+        var pos = player.blockPosition();
+        String context = "Фаза: %s. Доверие: %d. Координаты игрока: %d, %d, %d. Снаружи %s."
+            .formatted(progress.phase().label, progress.trust(), pos.getX(), pos.getY(), pos.getZ(),
+                player.level().isDarkOutside() ? "темно" : "светло");
+        var server = player.level().getServer();
+        var request = OllamaChat.ask(question, context, List.copyOf(session.history));
+        session.pending = request;
+        reply(player, "Думаю…");
+        request.whenComplete((generated, failure) -> server.execute(() -> {
+            if (sessions.get(player.getUUID()) != session || session.pending != request) return;
+            session.pending = null;
+            if (!active(player) || progress(player).phase() != progress.phase()) return;
+            if (failure != null) {
+                reply(player, "Модель сейчас не отвечает. Открой Ollama и проверь, что скачана gemma3:4b.");
+                return;
+            }
+            session.history.add(new OllamaChat.Message("user", question));
+            session.history.add(new OllamaChat.Message("assistant", generated));
+            while (session.history.size() > 12) session.history.removeFirst();
+            speak(player, session, generated);
+        }));
         return 1;
+    }
+
+    private static void speak(ServerPlayer player, Session session, String answer) {
+        if (session.actor instanceof Actors.Guide guide) guide.react(Actors.Face.SPEAKING, 50);
+        reply(player, answer);
     }
 
     private void useGuide(ServerPlayer player, Session session, Actors.Guide guide) {
         var held = player.getMainHandItem();
+        if (guide.isCarriedBy(player)) {
+            handleGuide(player);
+            return;
+        }
         if (held.is(Items.AMETHYST_SHARD)) {
             if (progress(player).trust() == 12) {
                 guide.react(Actors.Face.PLEASED, 32);
@@ -196,8 +260,27 @@ public final class EchoLure implements ModInitializer {
                 sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.85f, 1.2f);
             }
         } else {
-            ask(player, "");
+            handleGuide(player);
         }
+    }
+
+    private int handleGuide(ServerPlayer player) {
+        if (!active(player) || !(session(player).actor instanceof Actors.Guide guide)
+            || progress(player).phase() == Progress.Phase.ANGER) {
+            reply(player, "Сейчас рядом нет шарика, которого можно взять.");
+            return 0;
+        }
+        if (guide.isCarriedBy(player)) {
+            guide.throwFrom(player);
+            reply(player, "Эй! Осторожнее!");
+            return 1;
+        }
+        if (!guide.take(player)) {
+            reply(player, "Подойди к шарику ближе — на три блока — и убери преграды между вами.");
+            return 0;
+        }
+        reply(player, "Держишь меня? Нажми ПКМ или G, чтобы бросить в направлении взгляда.");
+        return 1;
     }
 
     private Progress progress(ServerPlayer player) {
@@ -213,6 +296,7 @@ public final class EchoLure implements ModInitializer {
         var next = previous.changeTrust(delta);
         if (previous.equals(next)) return false;
         store(player, next);
+        session(player).angerBar.update(next);
         if (next.phase() != previous.phase()) announce(player, next.phase());
         return true;
     }
@@ -220,7 +304,7 @@ public final class EchoLure implements ModInitializer {
     private Session session(ServerPlayer player) {
         Session session = sessions.get(player.getUUID());
         if (session != null && session.player == player) return session;
-        if (session != null) session.clearActor();
+        if (session != null) session.close();
         Session fresh = new Session(player);
         sessions.put(player.getUUID(), fresh);
         return fresh;
@@ -228,14 +312,14 @@ public final class EchoLure implements ModInitializer {
 
     private void clearSession(ServerPlayer player) {
         Session session = sessions.remove(player.getUUID());
-        if (session != null) session.clearActor();
+        if (session != null) session.close();
     }
 
     private static void announce(ServerPlayer player, Progress.Phase phase) {
         switch (phase) {
             case WAITING -> { }
             case GUIDE -> {
-                reply(player, "Слышу тебя. Напиши «Отблеск: где алмазы?» или подойди ко мне.");
+                reply(player, "Слышу тебя. Напиши «verity: привет!» и задай любой вопрос.");
                 sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.8f, 1.1f);
             }
             case STATIC -> reply(player, "Почему эхо возвращается раньше твоего голоса?");
@@ -249,7 +333,7 @@ public final class EchoLure implements ModInitializer {
     }
 
     private static void reply(ServerPlayer player, String message) {
-        player.sendSystemMessage(Component.literal("◈ Отблеск  ").withStyle(ChatFormatting.AQUA)
+        player.sendSystemMessage(Component.literal("◈ Желтый шарик  ").withStyle(ChatFormatting.AQUA)
             .append(Component.literal(message).withStyle(ChatFormatting.WHITE)));
     }
 
@@ -260,8 +344,13 @@ public final class EchoLure implements ModInitializer {
 
     private static final class Session {
         private final ServerPlayer player;
+        private final AngerBar angerBar;
+        private final List<OllamaChat.Message> history = new ArrayList<>();
+        private CompletableFuture<String> pending;
         private Progress.Phase phase;
         private Mob actor;
+        private ArrivalBox box;
+        private int boxExpires;
         private int age;
         private int nextQuestion;
         private int nextTrust;
@@ -270,16 +359,37 @@ public final class EchoLure implements ModInitializer {
 
         private Session(ServerPlayer player) {
             this.player = player;
+            angerBar = new AngerBar(player);
         }
 
         private boolean mayChangeTrust() {
             if (age < nextTrust) return false;
-            nextTrust = age + 3;
+            nextTrust = age + Progress.INTERACTION_INTERVAL;
             return true;
         }
 
-        private void update(Progress.Phase newPhase) {
+        private boolean prepareArrival() {
+            if (box != null && (box.isRemoved() || box.distanceToSqr(player) > 16 * 16)) {
+                box.discard();
+                box = null;
+            }
+            if (box != null) return true;
+            var arrival = new ArrivalBox(Actors.BOX, player.level());
+            if (!Actors.spawnBox(arrival, player)) return false;
+            box = arrival;
+            boxExpires = 0;
+            sound(player, SoundEvents.CHEST_OPEN, 0.45f, 0.7f);
+            return true;
+        }
+
+        private void update(Progress progress) {
+            angerBar.update(progress);
+            Progress.Phase newPhase = progress.phase();
             age++;
+            if (box != null && (box.isRemoved() || (boxExpires > 0 && age >= boxExpires))) {
+                box.discard();
+                box = null;
+            }
             BlockPos transformationPoint = null;
             if (phase != newPhase) {
                 if (newPhase == Progress.Phase.HUNT && phase == Progress.Phase.ANGER
@@ -287,7 +397,10 @@ public final class EchoLure implements ModInitializer {
                     && guide.distanceToSqr(player) <= 16 * 16) {
                     transformationPoint = guide.blockPosition();
                 }
-                if (newPhase != Progress.Phase.ANGER) clearActor();
+                boolean leavingBox = phase == Progress.Phase.WAITING && newPhase == Progress.Phase.GUIDE;
+                if (newPhase != Progress.Phase.ANGER && newPhase != Progress.Phase.WAITING && !leavingBox) {
+                    clearActor();
+                }
                 phase = newPhase;
                 nextEvent = age;
             }
@@ -295,9 +408,12 @@ public final class EchoLure implements ModInitializer {
                 || actor.distanceToSqr(player) > 32 * 32)) clearActor();
 
             switch (newPhase) {
-                case WAITING -> { }
+                case WAITING -> {
+                    if (prepareArrival()) box.setSceneSeconds(progress.seconds());
+                }
                 case GUIDE, STATIC, ANGER -> guide();
-                case WATCH, HUNT -> encounter(newPhase == Progress.Phase.HUNT, transformationPoint);
+                case WATCH, HUNT -> encounter(newPhase == Progress.Phase.HUNT, transformationPoint,
+                    progress.secondsUntilNormal());
             }
         }
 
@@ -307,8 +423,14 @@ public final class EchoLure implements ModInitializer {
             }
             if (actor == null) {
                 var guide = new Actors.Guide(player, phase == Progress.Phase.STATIC);
-                if (Actors.spawn(guide, player, false) && guide.attachOrb()) {
+                boolean spawned = box == null ? Actors.spawn(guide, player, false) : guide.emergeFrom(box);
+                if (spawned && guide.attachOrb()) {
                     actor = guide;
+                    if (box != null) {
+                        box.setSceneSeconds(Progress.ARRIVAL);
+                        boxExpires = age + 3;
+                        sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.8f, 1.2f);
+                    }
                 } else {
                     guide.discard();
                 }
@@ -323,7 +445,7 @@ public final class EchoLure implements ModInitializer {
             }
         }
 
-        private void encounter(boolean hunt, BlockPos transformationPoint) {
+        private void encounter(boolean hunt, BlockPos transformationPoint, int remainingSeconds) {
             boolean peaceful = player.level().getDifficulty() == Difficulty.PEACEFUL;
             if (actor != null && (age >= expire || (hunt && (peaceful || player.isCreative())))) clearActor();
             if (actor != null || age < nextEvent) return;
@@ -342,7 +464,7 @@ public final class EchoLure implements ModInitializer {
                 return;
             }
             actor = watcher;
-            expire = age + (attacks ? 28 : 8);
+            expire = age + (attacks ? remainingSeconds : 8);
             nextEvent = age + (attacks ? 55 : 33) + player.getRandom().nextInt(14);
             watcher.lookAt(EntityAnchorArgument.Anchor.EYES, player.getEyePosition());
             if (attacks) {
@@ -357,6 +479,19 @@ public final class EchoLure implements ModInitializer {
         private void clearActor() {
             if (actor != null) actor.discard();
             actor = null;
+            if (box != null) box.discard();
+            box = null;
+        }
+
+        private void close() {
+            angerBar.removeAllPlayers();
+            if (pending != null) {
+                var request = pending;
+                pending = null;
+                request.cancel(true);
+            }
+            history.clear();
+            clearActor();
         }
     }
 }
