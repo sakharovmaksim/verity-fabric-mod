@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/package_release.py --check-tag --tag "$RELEASE_TAG"
+      - name: Test release tooling
+        run: python3 -m unittest discover -s tests -v
+      - name: Download and verify compile dependencies
+        run: python3 scripts/prepare_build.py
+      - name: Compile mod
+        run: python3 build.py --minecraft-dir build/minecraft
+      - name: Package installation archive
+        run: python3 scripts/package_release.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: yellow-ball-release
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: yellow-ball-release
+          path: release
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd release
+          sha256sum --check *.zip.sha256
+          prerelease=()
+          case "$RELEASE_TAG" in *-*) prerelease=(--prerelease) ;; esac
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" ./*.zip ./*.zip.sha256 --clobber
+          else
+            gh release create "$RELEASE_TAG" ./*.zip ./*.zip.sha256 \
+              --verify-tag --generate-notes "${prerelease[@]}"
+          fi

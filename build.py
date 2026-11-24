@@ -12,7 +12,8 @@ from zipfile import ZipFile
 ROOT = Path(__file__).resolve().parent
 DEFAULT_GAME = Path.home() / "Library/Application Support/minecraft"
 VERSION = "26.3"
-PROFILE = "fabric-loader-0.20.1-26.3"
+LOADER_VERSION = "0.20.1"
+PROFILE = f"fabric-loader-{LOADER_VERSION}-{VERSION}"
 API_VERSION = "0.166.2+26.3"
 
 
