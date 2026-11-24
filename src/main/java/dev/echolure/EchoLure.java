@@ -22,6 +22,7 @@ import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -52,12 +53,14 @@ public final class EchoLure implements ModInitializer {
     public static final String GUIDE_NAME_KEY = "entity.echo_lure.guide";
 
     private final Map<UUID, Session> sessions = new HashMap<>();
+    private OllamaChat ollamaChat;
     private AttachmentType<Progress> progressType;
     private AttachmentType<Long> resourceReadyAt;
     private AttachmentType<String> pocketToken;
 
     @Override
     public void onInitialize() {
+        ollamaChat = new OllamaChat(FabricLoader.getInstance().getConfigDir());
         Actors.register();
         PocketGuide.register(this::releaseGuide);
         PayloadTypeRegistry.clientboundPlay().register(CarryState.TYPE, CarryState.CODEC);
@@ -95,8 +98,10 @@ public final class EchoLure implements ModInitializer {
                 return InteractionResult.PASS;
             }
             if (guide.belongsTo(serverPlayer) && active(serverPlayer)) {
-                var session = session(serverPlayer);
                 guide.react(Actors.Face.STARTLED, 22);
+                if (guide.tryDodge(serverPlayer)) return InteractionResult.FAIL;
+
+                var session = session(serverPlayer);
                 if (session.mayChangeTrust() && storeTrust(serverPlayer, -2)) {
                     if (progress(serverPlayer).phase() == Progress.Phase.ANGER) {
                         guide.enrage();
@@ -244,7 +249,7 @@ public final class EchoLure implements ModInitializer {
             .formatted(progress.phase().label, progress.trust(), pos.getX(), pos.getY(), pos.getZ(),
                 player.level().isDarkOutside() ? "темно" : "светло");
         var server = player.level().getServer();
-        var request = OllamaChat.ask(question, context, List.copyOf(session.history));
+        var request = ollamaChat.ask(question, context, List.copyOf(session.history));
         session.pending = request;
         reply(player, "Думаю…");
         request.whenComplete((generated, failure) -> server.execute(() -> {
@@ -252,7 +257,8 @@ public final class EchoLure implements ModInitializer {
             session.pending = null;
             if (!active(player) || progress(player).phase() != progress.phase()) return;
             if (failure != null) {
-                reply(player, "Модель сейчас не отвечает. Открой Ollama и проверь, что скачана gemma3:4b.");
+                reply(player, "Модель сейчас не отвечает. Проверь, запущен ли Ollama и скачана ли модель %s."
+                    .formatted(ollamaChat.model()));
                 return;
             }
             remember(session, question, generated);

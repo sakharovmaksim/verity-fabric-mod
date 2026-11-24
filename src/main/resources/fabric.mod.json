@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "echo_lure",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "name": "Желтый шарик",
   "description": "A floating golden guide whose signal changes over time.",
   "environment": "*",

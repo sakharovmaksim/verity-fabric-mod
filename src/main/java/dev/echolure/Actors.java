@@ -118,6 +118,9 @@ final class Actors {
     }
 
     static final class Guide extends Allay {
+        private static final int DODGE_COOLDOWN_TICKS = 60;
+        private static final double DODGE_DISTANCE = 0.65;
+
         private final UUID owner;
         private Face idleFace;
         private Orb orb;
@@ -129,6 +132,7 @@ final class Actors {
         private ServerPlayer carrier;
         private int flightTicks;
         private int recoveryTicks;
+        private int nextDodgeTick;
 
         private void setCarrier(ServerPlayer player) {
             if (carrier == player) return;
@@ -248,6 +252,34 @@ final class Actors {
             idleFace = Face.ANGRY;
             reactionUntil = 0;
             if (hasOrb()) orb.show(Face.ANGRY);
+        }
+
+        boolean tryDodge(ServerPlayer attacker) {
+            if (idleFace == Face.ANGRY || emergenceOrigin != null || carrier != null || flightTicks > 0
+                || recoveryTicks > 0 || tickCount < nextDodgeTick || random.nextInt(5) != 0) return false;
+
+            Vec3 approach = position().subtract(attacker.position());
+            if (approach.horizontalDistanceSqr() < 1.0e-4) {
+                approach = Vec3.directionFromRotation(0, attacker.getYRot());
+            }
+            Vec3 sideways = new Vec3(-approach.z, 0, approach.x).normalize().scale(DODGE_DISTANCE);
+            if (random.nextBoolean()) sideways = sideways.reverse();
+            if (!dodgeBy(sideways) && !dodgeBy(sideways.reverse())) return false;
+
+            nextDodgeTick = tickCount + DODGE_COOLDOWN_TICKS;
+            return true;
+        }
+
+        private boolean dodgeBy(Vec3 offset) {
+            var path = getBoundingBox().expandTowards(offset);
+            if (!level().noCollision(this, path) || level().containsAnyLiquid(path)) return false;
+
+            getNavigation().stop();
+            move(MoverType.SELF, offset);
+            setDeltaMovement(Vec3.ZERO);
+            needsSync = true;
+            if (hasOrb()) orb.setPos(orbCenter());
+            return true;
         }
 
         void react(Face face, int ticks) {

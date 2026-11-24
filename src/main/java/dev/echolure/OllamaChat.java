@@ -1,30 +1,79 @@
 package dev.echolure;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class OllamaChat {
-    static final String MODEL = "gemma3:4b";
+    private static final Logger LOGGER = LoggerFactory.getLogger(OllamaChat.class);
+    private static final String CONFIG_FILE = "echo_lure.properties";
+    private static final String MODEL_PROPERTY = "ollama.model";
     private static final URI ENDPOINT = URI.create("http://127.0.0.1:11434/api/chat");
     private static final HttpClient CLIENT = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(3)).build();
     private static final Semaphore REQUESTS = new Semaphore(2);
 
+    private final String model;
+
     record Message(String role, String content) {}
 
-    private OllamaChat() {}
+    OllamaChat(Path configDir) {
+        model = loadModel(configDir.resolve(CONFIG_FILE));
+    }
 
-    static CompletableFuture<String> ask(String question, String context, List<Message> history) {
+    String model() {
+        return model;
+    }
+
+    private static String loadModel(Path configFile) {
+        var defaults = new Properties();
+        try (var resource = OllamaChat.class.getResourceAsStream("/" + CONFIG_FILE)) {
+            if (resource == null) throw new IllegalStateException("Missing bundled " + CONFIG_FILE);
+            defaults.load(resource);
+        } catch (IOException failure) {
+            throw new UncheckedIOException("Could not read bundled " + CONFIG_FILE, failure);
+        }
+        String defaultModel = defaults.getProperty(MODEL_PROPERTY).strip();
+
+        try {
+            Files.createDirectories(configFile.getParent());
+            try {
+                Files.writeString(configFile, MODEL_PROPERTY + "=" + defaultModel + "\n", StandardOpenOption.CREATE_NEW);
+                return defaultModel;
+            } catch (FileAlreadyExistsException alreadyConfigured) {
+                try (var reader = Files.newBufferedReader(configFile)) {
+                    var settings = new Properties();
+                    settings.load(reader);
+                    String configuredModel = settings.getProperty(MODEL_PROPERTY, "").strip();
+                    if (!configuredModel.isEmpty()) return configuredModel;
+                }
+            }
+            LOGGER.warn("{} is missing or empty in {}; using {}", MODEL_PROPERTY, configFile, defaultModel);
+        } catch (IOException | IllegalArgumentException failure) {
+            LOGGER.warn("Could not load {}; using {}", configFile, defaultModel, failure);
+        }
+        return defaultModel;
+    }
+
+    CompletableFuture<String> ask(String question, String context, List<Message> history) {
         if (!REQUESTS.tryAcquire()) {
             return CompletableFuture.failedFuture(new IllegalStateException("Ollama is busy"));
         }
@@ -52,9 +101,10 @@ final class OllamaChat {
             options.addProperty("num_predict", 160);
             options.addProperty("temperature", 0.7);
             var body = new JsonObject();
-            body.addProperty("model", MODEL);
+            body.addProperty("model", model);
             body.add("messages", messages);
             body.addProperty("stream", false);
+            body.addProperty("think", false);
             body.addProperty("keep_alive", "10m");
             body.add("options", options);
             var request = HttpRequest.newBuilder(ENDPOINT).timeout(Duration.ofSeconds(60))
