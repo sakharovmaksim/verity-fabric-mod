@@ -1,3 +1,5 @@
 {
-  "key.echo_lure.throw": "Взять / бросить Желтый шарик"
+  "key.echo_lure.throw": "Взять / бросить Желтый шарик",
+  "item.echo_lure.pocket_guide": "Желтый шарик (в инвентаре)",
+  "item.echo_lure.pocket_guide.release": "ПКМ в воздух — выпустить своего шарика"
 }

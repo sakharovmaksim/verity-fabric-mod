@@ -16,10 +16,14 @@ public final class EchoLureClient implements ClientModInitializer {
     private static boolean throwing;
 
     public static boolean useCarriedGuide() {
-        if (!carrying && !throwing) return false;
         var client = Minecraft.getInstance();
+        if (!carrying && !throwing) {
+            // Do not immediately release a newly stored item while the original click is still held.
+            return useWasDown && client.player != null && (client.player.getMainHandItem().is(PocketGuide.ITEM)
+                || (client.player.getMainHandItem().isEmpty() && client.player.getOffhandItem().is(PocketGuide.ITEM)));
+        }
         if (carrying && !throwing && !useWasDown && client.player != null) {
-            client.player.connection.sendCommand("yellow throw");
+            client.player.connection.sendCommand(client.player.isShiftKeyDown() ? "yellow store" : "yellow throw");
             throwing = true;
         }
         return true;

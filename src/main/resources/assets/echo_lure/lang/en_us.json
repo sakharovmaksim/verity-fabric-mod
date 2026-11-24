@@ -1,3 +1,5 @@
 {
-  "key.echo_lure.throw": "Pick up / throw Yellow Ball"
+  "key.echo_lure.throw": "Pick up / throw Yellow Ball",
+  "item.echo_lure.pocket_guide": "Yellow Ball (in inventory)",
+  "item.echo_lure.pocket_guide.release": "Right-click in the air to release your ball"
 }

@@ -45,6 +45,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 public final class EchoLure implements ModInitializer {
@@ -52,13 +53,20 @@ public final class EchoLure implements ModInitializer {
 
     private final Map<UUID, Session> sessions = new HashMap<>();
     private AttachmentType<Progress> progressType;
+    private AttachmentType<Long> resourceReadyAt;
+    private AttachmentType<String> pocketToken;
 
     @Override
     public void onInitialize() {
         Actors.register();
+        PocketGuide.register(this::releaseGuide);
         PayloadTypeRegistry.clientboundPlay().register(CarryState.TYPE, CarryState.CODEC);
         progressType = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "progress"),
             builder -> builder.persistent(Progress.CODEC).copyOnDeath());
+        resourceReadyAt = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "resource_ready_at"),
+            builder -> builder.persistent(com.mojang.serialization.Codec.LONG).copyOnDeath());
+        pocketToken = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "pocket_token"),
+            builder -> builder.persistent(com.mojang.serialization.Codec.STRING).copyOnDeath());
         CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) -> dispatcher.register(commands()));
         ServerTickEvents.END_SERVER_TICK.register(this::tick);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
@@ -108,6 +116,7 @@ public final class EchoLure implements ModInitializer {
             demo.then(Commands.literal(phase.name().toLowerCase(Locale.ROOT)).executes(context -> {
                 ServerPlayer player = context.getSource().getPlayerOrException();
                 clearSession(player);
+                clearPocket(player);
                 Progress next = Progress.demo(phase);
                 store(player, next);
                 reply(player, "Пробная фаза — " + phase.label + ".");
@@ -116,6 +125,9 @@ public final class EchoLure implements ModInitializer {
             }));
         }
         return Commands.literal("yellow")
+            .then(Commands.literal("store").executes(context -> storeGuide(context.getSource().getPlayerOrException())))
+            .then(Commands.literal("release").executes(context -> releaseGuide(
+                context.getSource().getPlayerOrException(), null) ? 1 : 0))
             .then(Commands.literal("throw").executes(context -> handleGuide(
                 context.getSource().getPlayerOrException())))
             .then(Commands.literal("status").executes(context -> {
@@ -124,7 +136,7 @@ public final class EchoLure implements ModInitializer {
                 reply(player, progress.enabled()
                     ? "%s · %d:%02d · доверие %+d".formatted(
                         progress.phase().label, progress.seconds() / 60, progress.seconds() % 60, progress.trust())
-                        + " · " + AngerBar.label(progress)
+                        + " · " + AngerBar.label(progress) + (packed(player) ? " · в инвентаре" : "")
                     : "Сигнал отключён. /yellow start начнёт историю заново.");
                 return 1;
             }))
@@ -135,8 +147,9 @@ public final class EchoLure implements ModInitializer {
                     return 0;
                 }
                 clearSession(player);
-                store(player, Progress.INITIAL);
-                reply(player, "Слушаю эфир. Оставайся в Верхнем мире.");
+                store(player, packed(player) ? progress(player).withEnabled(true) : Progress.INITIAL);
+                reply(player, packed(player) ? "Сигнал включён. Выпусти меня из инвентаря через ПКМ или /yellow release."
+                    : "Слушаю эфир. Оставайся в Верхнем мире.");
                 return 1;
             }))
             .then(Commands.literal("stop").executes(context -> {
@@ -184,6 +197,10 @@ public final class EchoLure implements ModInitializer {
     }
 
     private boolean active(ServerPlayer player) {
+        return available(player) && !packed(player);
+    }
+
+    private boolean available(ServerPlayer player) {
         return player.isAlive() && !player.isSpectator() && !player.isSleeping()
             && player.level().dimension().equals(Level.OVERWORLD) && progress(player).enabled();
     }
@@ -191,7 +208,8 @@ public final class EchoLure implements ModInitializer {
     private int ask(ServerPlayer player, String question) {
         Progress progress = progress(player);
         if (!active(player) || progress.phase() == Progress.Phase.WAITING) {
-            reply(player, progress.enabled() ? "Связь пока недоступна в этом месте или в этой фазе."
+            reply(player, packed(player) ? "Я в инвентаре. Выпусти меня через ПКМ предметом или /yellow release."
+                : progress.enabled() ? "Связь пока недоступна в этом месте или в этой фазе."
                 : "Сигнал отключён. Включить снова — /yellow start.");
             return 0;
         }
@@ -205,6 +223,13 @@ public final class EchoLure implements ModInitializer {
             return 0;
         }
         session.nextQuestion = session.age + 5;
+        var resource = ResourceRequests.parse(question);
+        if (resource != null) {
+            String response = requestResources(player, session, progress, resource);
+            remember(session, question, response);
+            speak(player, session, response);
+            return 1;
+        }
         String answer = Dialogue.answer(player, question, progress.phase());
         if (answer != null) {
             speak(player, session, answer);
@@ -230,12 +255,42 @@ public final class EchoLure implements ModInitializer {
                 reply(player, "Модель сейчас не отвечает. Открой Ollama и проверь, что скачана gemma3:4b.");
                 return;
             }
-            session.history.add(new OllamaChat.Message("user", question));
-            session.history.add(new OllamaChat.Message("assistant", generated));
-            while (session.history.size() > 12) session.history.removeFirst();
+            remember(session, question, generated);
             speak(player, session, generated);
         }));
         return 1;
+    }
+
+    private String requestResources(ServerPlayer player, Session session, Progress progress,
+                                    ResourceRequests.Request request) {
+        double willingness = ResourceRequests.willingness(progress);
+        if (willingness == 0) return "Ничего я тебе сейчас не дам. Держись подальше.";
+        if (request.error() != null) return request.error();
+        long now = player.level().getGameTime();
+        long ready = ((AttachmentTarget) player).getAttachedOrElse(resourceReadyAt, 0L);
+        if (ready > now) return "Дай мне передохнуть. Ещё одну просьбу о предметах выслушаю через "
+            + ((ready - now + 19) / 20) + " с.";
+        ((AttachmentTarget) player).setAttached(resourceReadyAt, now + ResourceRequests.COOLDOWN * 20L);
+        if (player.getRandom().nextDouble() >= willingness) {
+            if (session.actor instanceof Actors.Guide guide) guide.react(Actors.Face.UNEASY, 40);
+            return progress.trust() < 0 ? "После того, как ты со мной обращался? Нет, сейчас я не хочу делиться."
+                : progress.phase() == Progress.Phase.STATIC ? "…ш-ш… Не сейчас. Мне тревожно, оставлю это у себя."
+                : "Сегодня не хочется делиться. Давай чуть позже.";
+        }
+        String granted = ResourceRequests.grant(player, request);
+        if (granted == null) {
+            ((AttachmentTarget) player).setAttached(resourceReadyAt, now);
+            return "В инвентаре не хватает места. Освободи его и попроси снова — пока ничего не выдавал.";
+        }
+        if (session.actor instanceof Actors.Guide guide) guide.react(Actors.Face.PLEASED, 40);
+        sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.8f, 1.3f);
+        return granted;
+    }
+
+    private static void remember(Session session, String question, String answer) {
+        session.history.add(new OllamaChat.Message("user", question));
+        session.history.add(new OllamaChat.Message("assistant", answer));
+        while (session.history.size() > 12) session.history.removeFirst();
     }
 
     private static void speak(ServerPlayer player, Session session, String answer) {
@@ -244,6 +299,10 @@ public final class EchoLure implements ModInitializer {
     }
 
     private void useGuide(ServerPlayer player, Session session, Actors.Guide guide) {
+        if (player.isShiftKeyDown()) {
+            storeGuide(player);
+            return;
+        }
         var held = player.getMainHandItem();
         if (guide.isCarriedBy(player)) {
             handleGuide(player);
@@ -262,6 +321,74 @@ public final class EchoLure implements ModInitializer {
         } else {
             handleGuide(player);
         }
+    }
+
+    private String pocketToken(ServerPlayer player) {
+        return ((AttachmentTarget) player).getAttachedOrElse(pocketToken, "");
+    }
+
+    private boolean packed(ServerPlayer player) { return !pocketToken(player).isEmpty(); }
+
+    private void clearPocket(ServerPlayer player) {
+        String token = pocketToken(player);
+        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+            if (PocketGuide.matches(player.getInventory().getItem(slot), player, token)) {
+                player.getInventory().setItem(slot, ItemStack.EMPTY);
+            }
+        }
+        ((AttachmentTarget) player).setAttached(pocketToken, "");
+        player.inventoryMenu.broadcastChanges();
+    }
+
+    private int storeGuide(ServerPlayer player) {
+        Progress state = progress(player);
+        if (!active(player) || (state.phase() != Progress.Phase.GUIDE && state.phase() != Progress.Phase.STATIC)
+            || !(session(player).actor instanceof Actors.Guide guide)) {
+            reply(player, packed(player) ? "Я уже в инвентаре." : "Сейчас меня нельзя убрать: нужен обычный шарик рядом.");
+            return 0;
+        }
+        if (!guide.isCarriedBy(player) && (guide.distanceToSqr(player) > 9 || !player.hasLineOfSight(guide))) {
+            reply(player, "Подойди ко мне на три блока, чтобы убрать в инвентарь.");
+            return 0;
+        }
+        if (player.getInventory().getFreeSlot() < 0) {
+            reply(player, "Освободи одну ячейку инвентаря для меня.");
+            return 0;
+        }
+        String token = UUID.randomUUID().toString();
+        player.getInventory().add(PocketGuide.create(player, token));
+        ((AttachmentTarget) player).setAttached(pocketToken, token);
+        clearSession(player);
+        player.inventoryMenu.broadcastChanges();
+        reply(player, "Я в инвентаре. Возьми меня в руку и нажми ПКМ, чтобы выпустить.");
+        return 1;
+    }
+
+    private boolean releaseGuide(ServerPlayer player, ItemStack source) {
+        String token = pocketToken(player);
+        if (token.isEmpty() || (source != null && !PocketGuide.matches(source, player, token))) {
+            reply(player, "Этот шарик уже выпущен, принадлежит другому игроку или это старая копия.");
+            return false;
+        }
+        if (!available(player)) {
+            reply(player, "Выпустить меня можно в Верхнем мире, пока история включена. Включить — /yellow start.");
+            return false;
+        }
+        var guide = new Actors.Guide(player, progress(player).phase() == Progress.Phase.STATIC);
+        if (!Actors.spawn(guide, player, false) || !guide.attachOrb()) {
+            guide.discard();
+            reply(player, "Рядом слишком тесно. Найди свободное место, чтобы выпустить меня.");
+            return false;
+        }
+        clearPocket(player);
+        // Also consume a token used from a container/carried slot, including in Creative.
+        if (source != null) source.setCount(0);
+        Session session = session(player);
+        session.actor = guide;
+        session.phase = progress(player).phase();
+        session.update(progress(player));
+        reply(player, "Снова на свободе. Я помню, как ты со мной обращался.");
+        return true;
     }
 
     private int handleGuide(ServerPlayer player) {
