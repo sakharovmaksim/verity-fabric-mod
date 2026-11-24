@@ -86,7 +86,8 @@ class PackageTest(unittest.TestCase):
                              {mod_name, api_name, "INSTALL.txt", "SHA256SUMS.txt", "LICENSES/Fabric-API.txt"})
             self.assertEqual(archive.read(mod_name), self.mod.read_bytes())
             self.assertEqual(archive.read(api_name), self.api.read_bytes())
-            self.assertIn("Не заменяй папку целиком", archive.read("INSTALL.txt").decode("utf-8"))
+            self.assertIn("Copy the two files individually to keep your other mods.",
+                          archive.read("INSTALL.txt").decode("utf-8"))
             for line in archive.read("SHA256SUMS.txt").decode("ascii").splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(digest, hashlib.sha256(archive.read(name)).hexdigest())

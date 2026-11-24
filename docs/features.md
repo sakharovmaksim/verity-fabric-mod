@@ -1,198 +1,198 @@
-# Возможности Echo Lure — Желтый шарик
+# Echo Lure features for Yellow Ball
 
-Описание версии **1.0.15** для Minecraft Java Edition **26.3**, Fabric Loader **0.20.1** и Fabric API **0.166.2+26.3**.
+This guide covers version **1.0.15** for Minecraft Java Edition **26.3**, Fabric Loader **0.20.1**, and Fabric API **0.166.2+26.3**.
 
-Желтый шарик, к которому можно обращаться как Желтый шарик, — летающий помощник с диалогами, доверием и постепенно развивающейся хоррор-историей. Прогресс и отношения с ним сохраняются отдельно для каждого игрока в каждом мире. Инструкция по установке находится в [README](../README.md).
+Yellow Ball is a flying companion you can talk to as its trust in you changes and a horror story gradually unfolds. Each world saves story progress and trust separately for each player. [Installation instructions](../README.md)
 
-## Первое появление из коробки
+## First appearance
 
-В начале истории рядом с игроком появляется закрытая картонная коробка. Она слегка дрожит, затем четыре створки раскрываются. Примерно на восьмой секунде из коробки плавно поднимается жёлтый шарик и начинает общение. Через несколько секунд пустая коробка исчезает.
+When the story begins, a closed cardboard box appears near the player. It shakes slightly before its four flaps open. About eight seconds in, Yellow Ball rises slowly out of the box and starts talking. The empty box disappears a few seconds later.
 
-Коробка появляется на свободной твёрдой площадке в пределах нескольких блоков от игрока. Если подходящего места нет, вступление ждёт его появления. Коробка является отдельной сущностью, а её исчезновение освобождает площадку.
+The box needs clear space on solid ground within a few blocks of the player. If there is no suitable spot, the intro waits for one. The box is a separate entity and frees up the space when it disappears.
 
-Вступление проходит один раз для текущего прогресса истории каждого игрока. После перезахода или смерти завершённое вступление остаётся завершённым. При выходе во время вступления оно продолжается с сохранённого времени. `/yellow stop`, затем `/yellow start` запускают историю заново. Для повторного просмотра также подходит `/yellow demo waiting` с включёнными читами.
+The intro plays once per player for the current story progression. Once completed, it stays completed after you rejoin or die. If you leave during the intro, it resumes from the saved time. To restart the story, run `/yellow stop` followed by `/yellow start`. With cheats enabled, you can also replay the intro with `/yellow demo waiting`.
 
-## Внешность и мимика
+## Appearance and expressions
 
-В дружелюбной форме Желтый шарик выглядит как маленький матовый жёлтый шарик с тёмными глазами и улыбкой. Его лицо поворачивается к камере. Он следует за владельцем и догоняет его при перемещении.
+In its friendly form, Yellow Ball is a small matte yellow sphere with dark eyes and a smile. Its face turns toward the camera. It follows its owner and catches up as they move.
 
-| Выражение | Когда появляется |
+| Expression | When it appears |
 | --- | --- |
-| Спокойное | Обычное состояние помощника |
-| Моргание | Периодически во время ожидания |
-| Разговор | Рот открывается и закрывается при ответе |
-| Радость | При подарке аметистового осколка |
-| Испуг | При ударе, пока доверие выше порога ярости |
-| Тревога | В фазе помех |
-| Злость | При достижении порога ярости, перед превращением |
+| Calm | The companion's default expression |
+| Blink | Periodically while idle |
+| Speaking | Its mouth opens and closes as it replies |
+| Pleased | When given an amethyst shard |
+| Startled | When struck while trust is above the rage threshold |
+| Uneasy | During the Static phase |
+| Angry | When trust reaches the rage threshold, just before the transformation |
 
-Монстр имеет отдельную объёмную модель с сутулым телом, длинными руками, асимметричным лицом и подвижной челюстью. У него есть анимации движения, покачивания головы и раскрытия пасти.
+The monster has its own 3D model with a hunched body, long arms, an asymmetrical face, and a moving jaw. It has animations for moving, swaying its head, and opening its mouth.
 
-## Общение
+## Conversation
 
-Открой игровой чат и напиши `verity:`, затем свободный текст вопроса или реплики. Также подходят обращения `Желтый шарик:` и `yellow:`. Регистр букв произвольный, после обращения также подходит запятая. Ответ получает игрок, задавший вопрос.
+Open Minecraft chat and start a message with `verity:`, followed by a question or anything you want to say. You can also address the companion with `Желтый шарик:` or `yellow:`. The prefixes are case-insensitive and also accept a comma. Replies go to the player who sent the message.
 
 ```text
-verity: привет, расскажи короткую историю
-Желтый шарик: привет! Как дела?
-Желтый шарик: придумай имя для моего кота
-yellow: расскажи короткую историю про заброшенную шахту
-Желтый шарик: моего кота зовут Барсик, запомни
-Желтый шарик: как зовут моего кота?
+verity: hi, tell me a short story
+Желтый шарик: hi! how are you?
+verity: suggest a name for my cat
+yellow: tell me a short story about an abandoned mine
+verity: my cat's name is Milo, remember that
+verity: what's my cat's name?
 ```
 
-Также можно использовать `/yellow ask <вопрос>`.
+You can also use `/yellow ask <question>`.
 
-## Переноска и броски
+## Picking up and throwing
 
-Подойди к своему шарику на расстояние до трёх блоков и нажми **ПКМ по нему**, чтобы взять его перед собой. Следующее нажатие **ПКМ** бросает шарик в направлении взгляда, даже если под прицелом воздух или блок. Удерживание кнопки после взятия не вызывает автоматического броска: отпусти её и нажми снова. Пока шарик в руках, этот клик используется для броска, поэтому еда и установка блоков не срабатывают.
+Stand within three blocks of your companion and **right-click it** to hold it in front of you. **Right-click again** to throw it in the direction you're looking, even when aiming at a block or empty air. Release and press the button again after picking it up. While you are holding Yellow Ball, right-click is used to throw it and takes priority over eating or placing blocks.
 
-ПКМ с аметистовым осколком по свободному шарику по-прежнему дарит осколок. **G** и `/yellow throw` также позволяют взять или бросить шарик. Клавишу G можно изменить в настройках управления.
+Right-click a free-flying companion with an amethyst shard to give it the shard. **G** and `/yellow throw` also pick up or throw the companion. You can rebind G in the Controls settings.
 
-Шарик летит по дуге, сталкивается с блоками и может упасть в воду или лаву. Примерно через пять секунд он снова начинает следовать за владельцем. Лава его не убивает: он пугается, жалуется на жар и теряет доверие — по две единицы с общей паузой три секунды. Обычный бросок сам по себе доверие не снижает. Темп накопления злости в лаве такой же, как при регулярных ударах.
+Yellow Ball travels in an arc, collides with blocks, and can land in water or lava. It starts following its owner again after about five seconds. It survives lava, but gets startled, complains about the heat, and loses two points of trust on the shared three-second cooldown. Throwing it on its own has no effect on trust. Lava builds anger at the same rate as regular hits.
 
-Взять можно только своего помощника в обычной форме, без преград между вами. Злого шарика перед превращением и монстра взять нельзя. При смене фазы, остановке истории или завершении игровой сессии переноска прекращается.
+You can pick up your own companion in its normal form when you have a clear line of sight. Carrying ends when the phase changes, the story stops, or the play session ends.
 
-### Шарик в инвентаре
+### Storing Yellow Ball in your inventory
 
-**Shift + ПКМ по своему шарику** убирает его в свободную ячейку инвентаря. Это работает также, когда шарик уже удерживается перед собой. Альтернатива — `/yellow store` рядом с ним. Нужен обычный шарик в фазе контакта или помех; злую форму перед превращением и монстра убрать нельзя. При заполненном инвентаре шарик остаётся в мире.
+**Shift + right-click your companion** to put it in a free inventory slot. This also works while you are holding it in front of you. You can use `/yellow store` when standing nearby. Storage is available in the Contact and Static phases while the companion is in its normal form. If your inventory is full, Yellow Ball stays in the world.
 
-В инвентаре появляется отдельный предмет с жёлтым шариком и подсказкой. Возьми его в любую руку и нажми **ПКМ в воздух**, чтобы выпустить помощника рядом. Предмет расходуется и в творческом режиме. Если места для появления нет, он остаётся в инвентаре.
+The pocket companion appears as an item with a tooltip. Hold it in either hand and **right-click in the air** to release it nearby. This consumes the item even in Creative mode. If there is no room for the companion to spawn, the item stays in your inventory.
 
-Пока шарик убран, он не появляется в мире, шкала скрыта, история и злость на паузе. Доверие и накопленное время сохраняются при перезаходе и смерти. Общение и выдача ресурсов возобновляются после выпуска; память текущего разговора при уборке очищается. Пауза между просьбами о ресурсах продолжает отсчитываться по времени мира.
+While Yellow Ball is stored, it stays out of the world, the anger bar is hidden, and the story and anger timers pause. Trust and elapsed time carry over when you rejoin or respawn. Storing the companion clears conversation history. Chat and item requests resume when you release it. The item request cooldown keeps running on world time.
 
-Предмет привязан к владельцу: другой игрок не сможет выпустить чужого шарика. Можно хранить его в сундуке. Если предмет потерялся или остался в другом месте, `/yellow release` возвращает своего помощника рядом; старый предмет становится недействительным. Копии предмета не создают дополнительных помощников. Для выпуска нужны включённая история, Верхний мир и свободное место рядом.
+The item is tied to its owner. You can keep it in a chest. If you lose it or leave it elsewhere, `/yellow release` brings your companion back nearby and invalidates the old item. Copies cannot spawn extra companions. To release Yellow Ball, the story must be enabled, you must be in the Overworld, and there must be space nearby.
 
-При `/yellow stop` шарик остаётся убранным, а `/yellow start` снова включает его с сохранённым прогрессом. Демонстрационная команда отменяет хранение и удаляет соответствующий предмет из инвентаря владельца.
+Running `/yellow stop` keeps Yellow Ball stored. Running `/yellow start` enables the story again with its saved progress. A demo command cancels storage and removes the matching item from the owner's inventory.
 
-### Свободный разговор через Ollama
+### Free-form chat through Ollama
 
-В фазах контакта и помех на свободные вопросы отвечает модель из **Ollama**. По умолчанию используется **Gemma 4 E4B**. Можно разговаривать на русском, обсуждать разные темы, просить истории и советы по Minecraft. Модель получает указание отвечать на языке игрока короткими репликами. В фазе помех её манера общения становится загадочнее.
+An **Ollama** model answers open-ended questions during the Contact and Static phases. The default model is **Gemma 4 E4B**. You can chat in Russian or English, ask for stories and Minecraft tips, or discuss other topics. The model is prompted to reply briefly in the player's language. Its replies become more mysterious during Static.
 
-- Модель работает локально и используется без API-ключа и оплаты запросов. Перед игрой нужно запустить Ollama и скачать выбранную модель. Для модели по умолчанию выполни `ollama pull gemma4:e4b`.
-- В запрос входят вопрос, последние шесть обменов репликами свободного разговора, текущая фаза, доверие, координаты игрока и информация о том, светло ли снаружи.
-- Память разговора отдельная для каждого игрока. Она хранится в оперативной памяти и очищается при выходе, смерти, сне, переходе в другое измерение, остановке истории или выборе демонстрационной фазы.
-- Во время ожидания появляется сообщение «Думаю…», а мир продолжает работать. После получения ответа у шарика включается мимика разговора.
-- Вопрос может содержать до 500 символов. Между вопросами действует пауза примерно пять секунд. Для одного игрока одновременно обрабатывается один запрос к модели, для сервера — до двух.
-- Ожидание ответа ограничено 60 секундами. При недоступной модели появляется подсказка проверить Ollama и скачать модель с настроенным тегом.
+- The model runs locally with no API key or per-request fees. Start Ollama and download your chosen model before playing. To download the default model, run `ollama pull gemma4:e4b`.
+- Each request contains the question, up to the last six exchanges of free-form chat, the current phase, trust, the player's coordinates, and whether it is light outside.
+- Conversation history is kept in memory separately for each player. It clears when you log out, die, sleep, change dimensions, stop the story, or select a demo phase.
+- The game keeps running while Yellow Ball displays “Thinking…” (`Думаю…`). Its speaking animation plays when the answer arrives.
+- Questions can be up to 500 characters, with about five seconds between questions. There can be one active model request per player and up to two per server.
+- Requests time out after 60 seconds. If the model is unavailable, the mod asks you to check Ollama and download the configured model tag.
 
-Модель формирует текстовые ответы. Перемещение персонажа, поиск руды, выдачу предметов по просьбе, доверие и превращение выполняет игровая логика мода. В фазах ярости, наблюдения и охоты Желтый шарик отвечает короткими репликами соответствующей фазы.
+Ollama generates text replies. The mod handles movement, ore search, item requests, trust, and the transformation. During Rage, Watching, and Hunt, Yellow Ball responds with short lines for that phase.
 
-Ollama должен быть доступен по адресу `http://127.0.0.1:11434/api/chat`. В одиночной игре это компьютер игрока, на выделенном сервере — компьютер сервера.
+Ollama must be reachable at `http://127.0.0.1:11434/api/chat`. In single-player, this is the player's computer. On a dedicated server, this is the server itself.
 
-При первом запуске мод создаёт `config/echo_lure.properties` со строкой `ollama.model=gemma4:e4b`. В одиночной игре ищи файл в папке игры профиля Fabric, на выделенном сервере — в папке `config` сервера. Чтобы сменить модель, укажи её тег в `ollama.model`, скачай модель в Ollama и перезапусти игру или сервер. Если настройка отсутствует, пуста или файл не удалось прочитать, мод использует модель по умолчанию. [Инструкция по смене модели](../README.md#как-сменить-модель)
+On first launch, the mod creates `config/echo_lure.properties` with `ollama.model=gemma4:e4b`. The file lives in the Fabric profile's game directory in single-player and in the server's `config` folder on a dedicated server. To switch models, update the tag in `ollama.model`, download that model in Ollama, and restart the game or server. The mod uses the default model if the setting is missing or blank or if it cannot read the file. [How to change the model](../README.md#change-the-model)
 
-### Подсказки по данным мира
+### Help based on the world
 
-В фазах контакта и помех мод самостоятельно обрабатывает несколько тем.
+During Contact and Static, the mod handles several kinds of questions directly.
 
-| Запрос | Возможность |
+| Example request | What it does |
 | --- | --- |
-| `Желтый шарик: где алмазы?` | Находит ближайшую обычную или глубинную алмазную руду в радиусе 16 блоков |
-| `Желтый шарик: где железо?` | Находит ближайшую обычную или глубинную железную руду в том же радиусе |
-| `Желтый шарик: где я?` | Показывает текущие координаты игрока |
-| `Желтый шарик: сейчас ночь?` | Сообщает, светло ли снаружи |
-| `Желтый шарик: 17 * 6` | Вычисляет результат простого выражения |
+| `verity: where are the diamonds?` | Finds the nearest diamond ore or deepslate diamond ore within 16 blocks |
+| `verity: where is the iron?` | Finds the nearest iron ore or deepslate iron ore within the same radius |
+| `verity: what are my coords?` | Shows your current coordinates |
+| `verity: what time is it?` | Tells you whether it is light outside |
+| `verity: 17 * 6` | Evaluates a simple arithmetic expression |
 
-Поиск руды использует уже загруженные чанки. Если жила поблизости не найдена, Желтый шарик даёт общую подсказку о высоте поиска. Арифметика поддерживает сложение, вычитание, умножение и деление двух целых чисел, включая отрицательные. Эти ответы доступны и при закрытом Ollama.
+Ore search uses loaded chunks. If it finds no nearby ore, Yellow Ball suggests a Y level to search. Arithmetic supports addition, subtraction, multiplication, and division of two integers, including negative numbers. These answers also work with Ollama closed.
 
-## Просьбы о ресурсах и предметах
+## Requesting resources and items
 
-В диалоге можно попросить предметы: если Желтый шарик согласится, они появятся в твоём инвентаре. Это работает без Ollama, без читов и в режиме выживания. Предметы создаются модом, искать или добывать их заранее не нужно.
+If Yellow Ball agrees to an item request, the mod creates the items and adds them to your inventory. Requests work in Survival without Ollama or cheats, and you can ask for items you have yet to find or mine.
 
 ```text
-verity: дай 8 алмазов
-verity: пожалуйста, дай мне 16 железа
-verity: можешь дать мне алмазную кирку?
-verity: принеси стак дубовых досок
-verity: дай minecraft:oak_log 4
+verity: give me 8 diamonds
+verity: please give me 16 iron ingots
+verity: can you give me a diamond pickaxe?
+verity: bring me a stack of oak planks
+verity: give me minecraft:oak_log 4
 verity: give me 12 diamonds please
 ```
 
-Поддерживаются русские и английские названия предметов Minecraft 26.3, распространённые формы слов и точные ID зарегистрированных предметов. Если название не распознано, шарик попросит уточнить его. «Железо» означает железные слитки, «дерево» — дубовые брёвна, «еда» — хлеб. Просьбы о советах и историях остаются обычным разговором, а вопрос «где алмазы?» по-прежнему ищет руду.
+The mod supports Russian and English Minecraft 26.3 item names, common word forms, and exact registered item IDs. If it cannot recognize the item, Yellow Ball asks you to clarify. In Russian, `железо` means iron ingots. `wood` refers to oak logs and `food` refers to bread. Requests for advice or stories stay in ordinary chat, and asking where diamonds are still looks for ore.
 
-Желтый шарик решает, делиться ли, по текущему настроению. В фазе контакта при нейтральном доверии шанс согласия — **75%**, при максимальном положительном доверии — **95%**. Шанс рассчитывается как 75% плюс 2,5 процентного пункта за единицу доверия; в фазе помех из результата вычитается ещё 15 пунктов. Затем он ограничивается диапазоном **10–95%**. В ярости, наблюдении и форме монстра он всегда отказывает. Удары и броски в лаву снижают доверие, подарки аметиста повышают его.
+In Contact, Yellow Ball has a **75%** chance of agreeing at neutral trust and a **95%** chance at maximum trust. The chance starts at 75%, changes by 2.5 percentage points per trust point, and drops by another 15 points during Static. The result is capped to **10–95%**. Yellow Ball refuses all requests during Rage, Watching, and Hunt. Hits and lava lower trust, while amethyst gifts raise it.
 
-За одну просьбу выдаётся один вид предмета, не больше одной его стопки: например, до 64 алмазов или одна кирка. Без количества выдаётся один предмет. Подходят цифры, слова «два», «восемь», «стак» и «полстака». После согласия или отказа по настроению действует пауза **30 секунд игрового времени**; она сохраняется при перезаходе и смерти. Слишком большое количество ограничивается размером стопки, о чём шарик сообщает. Если шарик согласился, но в инвентаре не хватает места, предметы не выдаются и новая пауза не начинается.
+You can request one item type and at most one stack at a time, such as 64 diamonds or one pickaxe. If you omit the quantity, you get one item. The mod accepts digits, `stack`, and Russian quantity words such as `два` (two), `восемь` (eight), `стак` (stack), and `полстака` (half a stack). An accepted request or a refusal based on mood starts a **30-second cooldown in game time** that carries over when you rejoin or die. Yellow Ball tells you when it caps a request at one stack. If it agrees but your inventory lacks space, it grants nothing and starts no new cooldown.
 
-Результат просьбы попадает в память текущего разговора. Свободный ответ модели сам по себе предметы не создаёт. Просьбы выполняются только для обратившегося игрока; команды, изменение мира, зачарования и произвольные данные предметов через этот механизм не выполняются.
+The result becomes part of the current conversation history. The mod grants items only to the player who requested them. This feature handles item grants, with no support for commands, world changes, enchantments, or custom item data.
 
-## Доверие и провокация
+## Trust and provocation
 
-В фазах контакта и помех можно менять доверие Желтого шарика. Начальное значение — **0**, диапазон — от **−120** до **+12**.
+You can change Yellow Ball's trust during Contact and Static. It starts at **0** and ranges from **−120** to **+12**.
 
-| Действие | Изменение доверия | Реакция |
+| Action | Trust change | Reaction |
 | --- | --- | --- |
-| ПКМ с аметистовым осколком в основной руке | +2 | Радостное лицо и звук аметиста |
-| Удар по своему помощнику | −2 | Испуг или переход к ярости |
-| Шарик после броска находится в лаве | −2 каждые три секунды | Испуг и жалоба на жар |
+| Right-click with an amethyst shard in your main hand | +2 | Pleased expression and an amethyst sound |
+| Land a hit on your own companion | −2 | Startled expression or a transition to Rage |
+| The companion stays in lava after a throw | −2 every three seconds | Startled expression and a complaint about the heat |
 
-Между изменениями доверия действует общая пауза примерно три секунды. Эта пауза сохраняется при выходе из мира. В выживании подарок расходует один осколок, в творческом режиме предмет сохраняется. При максимальном доверии Желтый шарик предлагает оставить осколок себе. Обращение с помощником учитывается для его владельца.
+Trust changes share a cooldown of about three seconds. This cooldown carries over when you leave the world. Giving a gift consumes one shard in Survival. In Creative mode, you keep the shard. At maximum trust, Yellow Ball asks you to keep the gift. Only the owner's actions count toward trust.
 
-Когда шарик свободно летает, при попытке удара он иногда отскакивает в сторону примерно на полблока. Для уворота нужно свободное место сбоку, а между уворотами проходит не меньше трёх секунд. Если шарик увернулся, доверие сохраняется.
+When flying freely, Yellow Ball sometimes dodges an attempted hit by moving about half a block sideways. It needs a clear path to at least one side, and at least three seconds pass between dodges. A successful dodge leaves trust unchanged.
 
-Если после удара доверие достигает **−120**, включается ярость. При нейтральном доверии требуется 60 засчитанных ударов. Попадания каждые три секунды приводят к превращению примерно за три минуты, каждые четыре секунды — примерно за четыре минуты. Подарки увеличивают число ударов до этого порога, а паузы позволяют злости спадать. Частые клики в пределах трёхсекундной паузы сохраняют текущую злость.
+A hit that brings trust to **−120** triggers Rage. Starting from neutral trust, this takes 60 counted hits. Landing a hit every three seconds leads to the transformation in about three minutes. Landing one every four seconds takes about four minutes. Gifts raise the number of hits needed, and longer pauses allow anger to fade. Rapid clicks within the three-second cooldown leave anger unchanged.
 
-В ярости лицо становится злым, Желтый шарик произносит предупреждение и примерно через **2–3 секунды активной игры** переходит к охоте. При наличии свободного места монстр появляется на позиции шарика. Если площадка занята или не подходит по высоте, мод ищет место рядом с игроком. Состояние ярости и обратный отсчёт сохраняются в прогрессе мира.
+In Rage, Yellow Ball shows an angry face, gives a warning, and enters the Hunt phase after about **2–3 seconds of active play**. If there is room, the monster appears where Yellow Ball was. Otherwise, the mod searches for a suitable spot near the player. The world saves the Rage state and countdown with the rest of the story progress.
 
-## Шкала злости и возвращение в обычную форму
+## Anger bar and return to normal
 
-У каждого игрока сверху экрана отображается собственная шкала Желтого шарика. Она обновляется каждую секунду, а после подарка или засчитанного удара меняется сразу.
+Each player sees their own Yellow Ball bar at the top of the screen. It updates once per second and immediately after a gift or a counted hit.
 
-| Состояние | Что показывает шкала |
+| State | What the bar shows |
 | --- | --- |
-| Коробка | Время до появления шарика |
-| Обычный шарик | Злость от 0 до 100% и примерное оставшееся время регулярного плохого обращения до срыва |
-| Ярость | Злость 100% и короткий отсчёт до монстра |
-| Наблюдение | Время до превращения по истории |
-| Монстр | Убывающую красную полоску и время до обычной формы |
+| Box | Time until Yellow Ball emerges |
+| Normal companion | Anger from 0% to 100% and the estimated time until Rage under continued mistreatment |
+| Rage | 100% anger and a short countdown to the transformation |
+| Watching | Time until the story triggers the transformation |
+| Monster | A shrinking red bar and the time until Yellow Ball returns to normal |
 
-При нейтральном доверии один засчитанный удар даёт около 1,7% злости. Шкала округляет процент до целого числа. Оценка времени до срыва рассчитана для ударов каждые три секунды и меняется при изменении доверия. Подарки повышают доверие и позволяют выдержать больше ударов. Если порог ярости ещё не достигнут, каждые десять секунд без новых ударов или подарков восстанавливается одна единица отрицательного доверия. Например, злость от одного удара полностью проходит за 20 секунд.
+At neutral trust, a counted hit adds about 1.7% anger. The bar rounds to the nearest whole percent. The time estimate assumes one hit every three seconds and changes with trust. Gifts increase trust, letting Yellow Ball tolerate more hits. Before the Rage threshold is reached, negative trust recovers by one point for every ten seconds without another hit or gift. For example, anger from one hit fades after 20 seconds.
 
-Форма монстра длится **60 секунд активной игры**. Затем преследователь исчезает, появляется обычный помощник и доверие становится нулевым. После ранней провокации продолжается фаза контакта, а после поздней охоты история возвращается к помехам. Отсчёт до следующих фаз начинается с соответствующего места истории.
+The monster form lasts **60 seconds of active play**. The hunter then disappears, the normal companion returns, and trust resets to zero. After an early Hunt caused by provocation, the story returns to Contact. After a later Hunt, it returns to Static. The countdown to later phases resumes from that point in the story.
 
-При выходе, смерти, сне и переходе в другое измерение время остывания приостанавливается. Оно сохраняется вместе с остальным прогрессом. При отключении истории шкала исчезает. Команда `/yellow status` также показывает злость и текущий отсчёт.
+Logging out, dying, sleeping, or changing dimensions pauses the cooldown. The world saves it with the rest of the progress. Turning off the story hides the bar. `/yellow status` also shows the current anger and countdown.
 
-## Развитие истории
+## Story progression
 
-Отсчёт начинается автоматически. Время накапливается, пока живой игрок бодрствует в Верхнем мире, история включена и игрок находится в режиме, отличном от наблюдателя. Сон, смерть и другие измерения приостанавливают отсчёт. Значение показывает `/yellow status`.
+The timer starts automatically. It advances while the story is enabled and the player is alive, awake, in the Overworld, and outside Spectator mode. Sleeping, dying, and visiting other dimensions pause the timer. Check it with `/yellow status`.
 
-| Фаза | Начало при доверии 0 | Что происходит |
+| Phase | Starts at zero trust | What happens |
 | --- | --- | --- |
-| Ожидание | Вход в мир | Коробка появляется рядом, дрожит и раскрывается |
-| Контакт | Около 8 секунд | Помощник поднимается из коробки, включаются диалог и взаимодействия |
-| Помехи | Около 8 минут | Тревожное лицо, изменённые реплики и периодические звуки |
-| Наблюдение | Около 20 минут | Помощника сменяют короткие появления наблюдателя |
-| Охота | Около 40 минут или после ярости | Монстр преследует игрока, появляются частицы и эффект темноты |
+| Waiting | When you enter the world | The box appears nearby, shakes, and opens |
+| Contact | About 8 seconds | The companion rises out of the box, and chat and interactions become available |
+| Static | About 8 minutes | The companion looks uneasy, its lines change, and sounds play periodically |
+| Watching | About 20 minutes | A watcher makes brief appearances in place of the companion |
+| Hunt | About 40 minutes, or after Rage | The monster pursues the player, with particles and a Darkness effect |
 
-Доверие также сдвигает обычное начало наблюдения и охоты. Для этого учитывается значение в пределах от −12 до +12, каждая единица даёт 15 секунд сдвига. Положительное доверие откладывает эти фазы, отрицательное приближает. Максимальный сдвиг составляет три минуты. Во время ярости, наблюдения и охоты подарки и удары больше не меняют доверие. Возвращение из формы монстра сбрасывает доверие до нуля.
+Trust shifts when Watching and Hunt normally start. For this calculation, trust is capped between −12 and +12, with a shift of 15 seconds per point. Positive trust delays those phases, and negative trust brings them forward. The maximum shift is three minutes. Gifts and hits have no effect on trust during Rage, Watching, or Hunt. Returning from monster form resets trust to zero.
 
-Наблюдатель появляется примерно на восемь секунд. Преследователь может оставаться до завершения минутного отсчёта, если жив и находится рядом с игроком. Если он исчез или погиб раньше, во время той же охоты возможна новая встреча. При начале погони эффект темноты длится пять секунд.
+The watcher appears for about eight seconds. The hunter can remain until the one-minute countdown ends if it is alive and close to the player. If it disappears or dies early, another encounter can occur during the same Hunt. The Darkness effect lasts five seconds at the start of a chase.
 
-Для атакующей формы нужны сложность выше мирной, режим выживания или приключения и свободная площадка. В мирном и творческом режимах в фазе охоты остаются звуковые события. Каждый преследователь атакует своего игрока. Монстра можно ранить и убить, после чего история продолжает развиваться и допускает новые появления.
+The hunter can attack in Survival or Adventure on difficulties above Peaceful, provided there is room to spawn. In Peaceful or Creative, the Hunt still plays sound events. Each hunter attacks only its assigned player. You can injure and kill the monster, and the story can continue with further encounters.
 
-## Команды
+## Commands
 
-Команды применяются к игроку, который их вводит.
+Commands apply to the player who runs them.
 
-| Команда | Действие |
+| Command | What it does |
 | --- | --- |
-| `/yellow status` | Показывает текущую фазу, накопленное время и доверие |
-| `/yellow ask <вопрос>` | Задаёт вопрос помощнику |
-| `/yellow throw` | Берёт своего шарика поблизости или бросает уже взятого в направлении взгляда |
-| `/yellow store` | Убирает своего обычного шарика поблизости в инвентарь |
-| `/yellow release` | Выпускает сохранённого шарика, включая восстановление после потери предмета |
-| `/yellow stop` | Выключает историю, убирает текущего персонажа и очищает память разговора |
-| `/yellow start` | После остановки запускает историю с начальным временем и доверием |
-| `/yellow demo waiting` | Сбрасывает прогресс в ожидание |
-| `/yellow demo guide` | Включает контакт с помощником |
-| `/yellow demo static` | Включает помехи |
-| `/yellow demo anger` | Включает злое лицо и отсчёт до превращения |
-| `/yellow demo watch` | Включает появления наблюдателя |
-| `/yellow demo hunt` | Включает охоту |
+| `/yellow status` | Shows the current phase, elapsed time, and trust |
+| `/yellow ask <question>` | Asks the companion a question |
+| `/yellow throw` | Picks up your nearby companion or throws it in the direction you're looking if you are already holding it |
+| `/yellow store` | Stores your nearby companion in your inventory while it is in its normal form |
+| `/yellow release` | Releases your stored companion, even if you have lost the item |
+| `/yellow stop` | Turns off the story, removes the current character, and clears chat history |
+| `/yellow start` | Restarts a stopped story from the starting time and trust |
+| `/yellow demo waiting` | Resets progress to Waiting |
+| `/yellow demo guide` | Starts Contact with the companion |
+| `/yellow demo static` | Starts Static |
+| `/yellow demo anger` | Shows the angry face and starts the transformation countdown |
+| `/yellow demo watch` | Starts the watcher's appearances |
+| `/yellow demo hunt` | Starts the Hunt |
 
-Для `/yellow demo` требуются читы или права оператора. Выбор демонстрационной фазы перезаписывает текущий прогресс и очищает память диалога. Остальные команды доступны обычному игроку. `/yellow start` при уже включённой истории сообщает её состояние.
+`/yellow demo` requires cheats or operator permissions. Choosing a demo phase overwrites current story progress and clears conversation history. The other commands are available to regular players. If the story is already enabled, `/yellow start` reports its current status.
 
-## Сохранение
+## Saved progress
 
-Мир сохраняет включённость истории, накопленное время, доверие, состояние превращения и время остывания. Эти данные переносятся при возрождении игрока. После возвращения в активную игру персонаж появляется по сохранённой фазе. Память свободного разговора начинается заново после завершения игровой сессии.
+The world saves whether the story is enabled, elapsed time, trust, the transformation state, and the remaining cooldown. This data carries over when you respawn. Once you return to active play, the companion or monster appears according to the saved phase. Free-form conversation history starts over when the play session ends.

@@ -39,29 +39,30 @@ def package(mod, api, destination, version):
     }
     with ZipFile(api) as archive:
         files["LICENSES/Fabric-API.txt"] = archive.read("LICENSE-fabric-api")
-    files["INSTALL.txt"] = f"""Желтый шарик {version} — Minecraft Java {build.VERSION}
+    files["INSTALL.txt"] = f"""Yellow Ball {version} for Minecraft Java {build.VERSION}
 
-Нужен Fabric Loader {build.LOADER_VERSION} для Minecraft {build.VERSION}.
-Архив подходит для macOS, Windows и Linux; Minecraft и Fabric Loader устанавливаются отдельно.
+You need Fabric Loader {build.LOADER_VERSION} for Minecraft {build.VERSION}.
+This archive works on macOS, Windows, and Linux. Install Minecraft and Fabric Loader separately.
 
-1. Закрой Minecraft. В Launcher найди папку игры своего профиля Fabric.
-   Стандартная папка на Mac: ~/Library/Application Support/minecraft
-2. При обновлении убери старый echo-lure-*.jar из папки mods.
-   Убери также старую версию Fabric API, если она отличается от вложенной.
-3. Скопируй оба JAR из папки mods этого архива в папку mods игры.
-   Создай mods, если её нет. Не заменяй папку целиком: сохрани остальные моды.
-4. Запусти профиль Fabric {build.VERSION}, открой мир и проверь /yellow status.
+1. Close Minecraft. Find your Fabric profile's Game Directory in Minecraft Launcher.
+   On macOS, the default is ~/Library/Application Support/minecraft.
+2. When upgrading, remove the old echo-lure-*.jar from the mods folder.
+   Remove any Fabric API version that differs from the bundled version.
+3. Copy both JARs from the archive's mods folder into your game's mods folder.
+   Create the folder if needed. Copy the two files individually to keep your other mods.
+4. Launch the Fabric profile for Minecraft {build.VERSION}, open a world, and run /yellow status.
 
-Для свободного разговора установи Ollama, выполни ollama pull gemma4:e4b
-и держи Ollama запущенным во время игры. Модель в архив не входит.
-Тег модели можно изменить в config/echo_lure.properties в папке игры,
-затем нужно перезапустить Minecraft.
-Просьбы о ресурсах вроде «verity: дай 8 алмазов» работают без Ollama.
+For free-form chat, install Ollama and run ollama pull gemma4:e4b to download the model.
+Keep Ollama running while you play. To use a different model, edit the tag in
+config/echo_lure.properties in the game directory and restart Minecraft.
+Item requests such as "verity: give me 8 diamonds" work without Ollama.
 
-Управление: ПКМ — взять/бросить; Shift + ПКМ — убрать в инвентарь.
-ПКМ предметом-шариком — выпустить. Диалог: verity: привет!
+Right-click to pick up or throw Yellow Ball. Shift + right-click to store it in your inventory.
+Hold the Yellow Ball item and right-click in the air to release it.
+To start a conversation, type "verity: hi!" in chat.
 
-Полная инструкция: https://github.com/sakharovmaksim/verity-fabric-mod#readme
+Full instructions are in the project README.
+https://github.com/sakharovmaksim/verity-fabric-mod#readme
 """.encode("utf-8")
     checksums = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in sorted(files.items()))
     files["SHA256SUMS.txt"] = checksums.encode("ascii")
