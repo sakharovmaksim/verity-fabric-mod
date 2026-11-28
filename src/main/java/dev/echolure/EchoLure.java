@@ -1,8 +1,6 @@
 package dev.echolure;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -53,9 +51,11 @@ public final class EchoLure implements ModInitializer {
     public static final String GUIDE_NAME_KEY = "entity.echo_lure.guide";
 
     private final Map<UUID, Session> sessions = new HashMap<>();
+    private final Map<UUID, Conversation> conversations = new HashMap<>();
     private OllamaChat ollamaChat;
     private AttachmentType<Progress> progressType;
     private AttachmentType<Long> resourceReadyAt;
+    private AttachmentType<Long> teleportReadyAt;
     private AttachmentType<String> pocketToken;
 
     @Override
@@ -68,6 +68,8 @@ public final class EchoLure implements ModInitializer {
             builder -> builder.persistent(Progress.CODEC).copyOnDeath());
         resourceReadyAt = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "resource_ready_at"),
             builder -> builder.persistent(com.mojang.serialization.Codec.LONG).copyOnDeath());
+        teleportReadyAt = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "teleport_ready_at"),
+            builder -> builder.persistent(com.mojang.serialization.Codec.LONG).copyOnDeath());
         pocketToken = AttachmentRegistry.create(Identifier.fromNamespaceAndPath("echo_lure", "pocket_token"),
             builder -> builder.persistent(com.mojang.serialization.Codec.STRING).copyOnDeath());
         CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) -> dispatcher.register(commands()));
@@ -75,8 +77,9 @@ public final class EchoLure implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             for (Session session : sessions.values()) session.close();
             sessions.clear();
+            conversations.clear();
         });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> clearSession(handler.player));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> resetSession(handler.player));
         ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, player, type) -> {
             String question = Dialogue.addressedQuestion(message.signedContent());
             if (question == null) return true;
@@ -120,7 +123,7 @@ public final class EchoLure implements ModInitializer {
         for (Progress.Phase phase : Progress.Phase.values()) {
             demo.then(Commands.literal(phase.name().toLowerCase(Locale.ROOT)).executes(context -> {
                 ServerPlayer player = context.getSource().getPlayerOrException();
-                clearSession(player);
+                resetSession(player);
                 clearPocket(player);
                 Progress next = Progress.demo(phase);
                 store(player, next);
@@ -159,7 +162,7 @@ public final class EchoLure implements ModInitializer {
             }))
             .then(Commands.literal("stop").executes(context -> {
                 ServerPlayer player = context.getSource().getPlayerOrException();
-                clearSession(player);
+                resetSession(player);
                 Progress progress = progress(player);
                 store(player, progress.withEnabled(false));
                 reply(player, "Сигнал отключён.");
@@ -219,24 +222,49 @@ public final class EchoLure implements ModInitializer {
             return 0;
         }
         Session session = session(player);
-        if (session.age < session.nextQuestion) {
-            reply(player, "Дай сигналу несколько секунд.");
-            return 0;
-        }
         if (question.length() > 500) {
             reply(player, "Задай вопрос покороче — до 500 символов.");
             return 0;
         }
+        var teleport = TeleportRequests.parse(question);
+        boolean locationFollowUp = teleport != null && teleport.useLastLocation() && session.locationFollowUpReady;
+        if (session.age < session.nextQuestion && !locationFollowUp) {
+            reply(player, "Дай сигналу несколько секунд.");
+            return 0;
+        }
+        session.locationFollowUpReady = false;
         session.nextQuestion = session.age + 5;
-        var resource = ResourceRequests.parse(question);
+        Conversation conversation = conversations.computeIfAbsent(player.getUUID(), id -> new Conversation());
+        long turn = conversation.nextTurn();
+        if (teleport != null) {
+            String response = requestTeleport(player, session, progress, teleport, conversation.lastLocation());
+            conversation.remember(turn, question, response);
+            reply(player, response);
+            return 1;
+        }
+        var location = LocationRequests.parse(question);
+        var resource = location == null ? ResourceRequests.parse(question) : null;
         if (resource != null) {
             String response = requestResources(player, session, progress, resource);
-            remember(session, question, response);
+            conversation.remember(turn, question, response);
             speak(player, session, response);
             return 1;
         }
-        String answer = Dialogue.answer(player, question, progress.phase());
+        var phase = progress.phase();
+        boolean canTalk = phase == Progress.Phase.GUIDE || phase == Progress.Phase.STATIC;
+        String answer;
+        if (canTalk && location != null) {
+            var result = LocationRequests.answer(player, location);
+            conversation.rememberLocation(result);
+            session.locationFollowUpReady = true;
+            answer = Dialogue.withPhase(result.message(), phase);
+        } else if (canTalk && LocationRequests.isRepeat(question)) {
+            answer = Dialogue.withPhase(conversation.repeatLocation(), phase);
+        } else {
+            answer = Dialogue.answer(player, question, phase);
+        }
         if (answer != null) {
+            conversation.remember(turn, question, answer);
             speak(player, session, answer);
             return 1;
         }
@@ -249,7 +277,7 @@ public final class EchoLure implements ModInitializer {
             .formatted(progress.phase().label, progress.trust(), pos.getX(), pos.getY(), pos.getZ(),
                 player.level().isDarkOutside() ? "темно" : "светло");
         var server = player.level().getServer();
-        var request = ollamaChat.ask(question, context, List.copyOf(session.history));
+        var request = ollamaChat.ask(question, context, conversation.history());
         session.pending = request;
         reply(player, "Думаю…");
         request.whenComplete((generated, failure) -> server.execute(() -> {
@@ -261,15 +289,58 @@ public final class EchoLure implements ModInitializer {
                     .formatted(ollamaChat.model()));
                 return;
             }
-            remember(session, question, generated);
+            conversation.remember(turn, question, generated);
             speak(player, session, generated);
         }));
         return 1;
     }
 
+    private String requestTeleport(ServerPlayer player, Session session, Progress progress,
+                                   TeleportRequests.Request request, LocationRequests.Result lastLocation) {
+        Actors.Guide guide = session.actor instanceof Actors.Guide actor ? actor : null;
+        if (guide != null) guide.react(Actors.Face.SPEAKING, 50);
+        double willingness = progress.favorWillingness();
+        if (willingness == 0) return "Сейчас я тебя никуда не перенесу. Держись подальше.";
+        BlockPos destination = request.destination();
+        if (request.useLastLocation()) {
+            if (lastLocation == null || lastLocation.position() == null) {
+                return "У меня нет координат этого места. Сначала попроси меня его найти.";
+            }
+            if (lastLocation.horizontalOnly()) {
+                return "Я знаю только X и Z этого места. Назови X, Y и Z для телепортации.";
+            }
+            destination = lastLocation.position();
+        }
+        if (destination == null) return TeleportRequests.USAGE;
+        long now = player.level().getGameTime();
+        long ready = ((AttachmentTarget) player).getAttachedOrElse(teleportReadyAt, 0L);
+        if (ready > now) return "Следующую просьбу о телепортации выслушаю через "
+            + ((ready - now + 19) / 20) + " с.";
+        if (request.useLastLocation()) {
+            destination = TeleportRequests.nearbyLanding(player, destination);
+            if (destination == null) return "В радиусе " + TeleportRequests.LANDING_RADIUS
+                + " блоков от цели нет безопасного места для приземления.";
+        } else {
+            String error = TeleportRequests.landingError(player, destination);
+            if (error != null) return error;
+        }
+        if (player.getRandom().nextDouble() >= willingness) {
+            ((AttachmentTarget) player).setAttached(teleportReadyAt, now + TeleportRequests.COOLDOWN * 20L);
+            if (guide != null) guide.react(Actors.Face.UNEASY, 40);
+            return progress.trust() < 0 ? "После того, как ты со мной обращался? Нет, перенести тебя не хочу."
+                : progress.phase() == Progress.Phase.STATIC ? "…ш-ш… Здесь что-то мешает сигналу. Сейчас не рискну."
+                : "Сейчас не хочется никого переносить. Попроси чуть позже.";
+        }
+        if (!TeleportRequests.teleport(player, destination)) return "Не получилось перенести тебя. Попробуй ещё раз.";
+        ((AttachmentTarget) player).setAttached(teleportReadyAt, now + TeleportRequests.COOLDOWN * 20L);
+        if (guide != null) guide.react(Actors.Face.PLEASED, 40);
+        sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.8f, 1.3f);
+        return "Готово, мы на %d, %d, %d.".formatted(destination.getX(), destination.getY(), destination.getZ());
+    }
+
     private String requestResources(ServerPlayer player, Session session, Progress progress,
                                     ResourceRequests.Request request) {
-        double willingness = ResourceRequests.willingness(progress);
+        double willingness = progress.favorWillingness();
         if (willingness == 0) return "Ничего я тебе сейчас не дам. Держись подальше.";
         if (request.error() != null) return request.error();
         long now = player.level().getGameTime();
@@ -291,12 +362,6 @@ public final class EchoLure implements ModInitializer {
         if (session.actor instanceof Actors.Guide guide) guide.react(Actors.Face.PLEASED, 40);
         sound(player, SoundEvents.AMETHYST_BLOCK_CHIME, 0.8f, 1.3f);
         return granted;
-    }
-
-    private static void remember(Session session, String question, String answer) {
-        session.history.add(new OllamaChat.Message("user", question));
-        session.history.add(new OllamaChat.Message("assistant", answer));
-        while (session.history.size() > 12) session.history.removeFirst();
     }
 
     private static void speak(ServerPlayer player, Session session, String answer) {
@@ -448,6 +513,11 @@ public final class EchoLure implements ModInitializer {
         if (session != null) session.close();
     }
 
+    private void resetSession(ServerPlayer player) {
+        clearSession(player);
+        conversations.remove(player.getUUID());
+    }
+
     private static void announce(ServerPlayer player, Progress.Phase phase) {
         switch (phase) {
             case WAITING -> { }
@@ -478,7 +548,6 @@ public final class EchoLure implements ModInitializer {
     private static final class Session {
         private final ServerPlayer player;
         private final AngerBar angerBar;
-        private final List<OllamaChat.Message> history = new ArrayList<>();
         private CompletableFuture<String> pending;
         private Progress.Phase phase;
         private Mob actor;
@@ -486,6 +555,7 @@ public final class EchoLure implements ModInitializer {
         private int boxExpires;
         private int age;
         private int nextQuestion;
+        private boolean locationFollowUpReady;
         private int nextTrust;
         private int nextEvent;
         private int expire;
@@ -623,7 +693,6 @@ public final class EchoLure implements ModInitializer {
                 pending = null;
                 request.cancel(true);
             }
-            history.clear();
             clearActor();
         }
     }

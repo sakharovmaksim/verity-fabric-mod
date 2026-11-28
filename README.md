@@ -12,7 +12,7 @@ You need **Minecraft Java Edition 26.3**, **Fabric Loader 0.20.1**, and **Fabric
 4. In the Launcher, open **Installations**, edit your Fabric profile, and find **Game Directory**. Copy **both JARs from the ZIP's `mods` folder** into that profile's `mods` folder. Create it if needed. The default path is `~/Library/Application Support/minecraft/mods`. Use **⌘⇧G** in Finder to open it. If your profile uses a custom game directory, use its `mods` folder. When upgrading, remove the old `echo-lure-*.jar` and any Fabric API version that differs from the bundled version. Copy the two files individually to keep your other mods. [Install Fabric mods](https://docs.fabricmc.net/players/installing-mods)
 5. Launch the Fabric profile for **26.3**, open a world, and enter `/yellow status`. When a new story starts, a box containing Yellow Ball appears nearby.
 
-If the command is unavailable, check the Launcher profile, Minecraft version, and `mods` folder. A successful load shows `echo_lure 1.0.15` in `logs/latest.log` inside the game directory.
+If the command is unavailable, check the Launcher profile, Minecraft version, and `mods` folder. A successful load shows `echo_lure 1.0.16` in `logs/latest.log` inside the game directory.
 
 ## Set up Ollama for free-form chat
 
@@ -35,7 +35,15 @@ Keep Ollama running while you play. The model runs locally with no API key or pe
 
 Type `verity: hi, tell me a short story` in chat to start a conversation. You can also use `Желтый шарик:`, `yellow:`, or `/yellow ask <question>`. Amethyst shards increase trust. Landing regular hits for about 3–4 minutes drives Yellow Ball into a rage. Sometimes it dodges sideways.
 
+Yellow Ball remembers recent exchanges during your play session. Try `verity: let's call my base Lighthouse` followed by `verity: what did we name my base?`.
+
 Try `verity: give me 8 diamonds` or `verity: give me a diamond pickaxe`. Yellow Ball may give you the items or refuse, depending on its mood. Item requests work without Ollama and have a 30-second cooldown.
+
+Try `verity: give me a Silence armor trim` for a smithing template, or `verity: teleport me to 120 70 -35` to move to a safe block in a loaded Overworld chunk. Teleport requests also depend on mood and have their own 30-second cooldown.
+
+Ask for coordinates with `verity: where are the diamonds?`, `verity: найди деревню`, or `/yellow ask find a cherry grove`. Yellow Ball searches the Overworld and posts the coordinates in chat, even with Ollama closed.
+
+After `verity: скажи координаты места с алмазами` finds ore, reply with `verity: перенеси меня туда` to ask for a teleport to a safe spot near it. Teleport odds still depend on mood.
 
 **Right-click Yellow Ball** to pick it up, then **right-click again** to throw it in the direction you're looking. You can also use **G** or `/yellow throw`. If you throw it into lava, it survives, gets angry, and comes back.
 
@@ -54,7 +62,7 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 25)"
 python3 build.py --fabric-api "$HOME/Library/Application Support/minecraft/mods/fabric-api-0.166.2+26.3.jar"
 ```
 
-If Fabric API is elsewhere, pass its full path to `--fabric-api`. For a different Launcher installation directory, add `--minecraft-dir "/path/to/minecraft"`. The installation directory contains `versions` and `libraries` and may be separate from the profile's game directory. The build produces `build/echo-lure-1.0.15+mc26.3.jar`.
+If Fabric API is elsewhere, pass its full path to `--fabric-api`. For a different Launcher installation directory, add `--minecraft-dir "/path/to/minecraft"`. The installation directory contains `versions` and `libraries` and may be separate from the profile's game directory. The build produces `build/echo-lure-1.0.16+mc26.3.jar`.
 
 ## Publish a release
 

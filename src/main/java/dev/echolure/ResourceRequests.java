@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SmithingTemplateItem;
 
 final class ResourceRequests {
     static final int COOLDOWN = 30;
@@ -60,6 +61,10 @@ final class ResourceRequests {
                 if (translated == null) continue;
                 LABELS.put(item, translated.get(0).getAsString());
                 for (var name : translated) addName(name.getAsString(), item);
+                if (item instanceof SmithingTemplateItem) {
+                    var title = translations.getAsJsonArray("item." + id.getNamespace() + "." + id.getPath() + ".new");
+                    if (title != null) addTemplateNames(item, title.get(0).getAsString(), title.get(1).getAsString());
+                }
             }
         } catch (java.io.IOException failure) {
             throw new IllegalStateException("Cannot load item names", failure);
@@ -77,6 +82,8 @@ final class ResourceRequests {
         alias(Items.COAL, "угля", "углей");
         alias(Items.DIAMOND_CHESTPLATE, "алмазная броня");
         alias(Items.IRON_CHESTPLATE, "броня", "железная броня");
+        alias(Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE, "шаблон для незерита", "незеритовый шаблон",
+            "шаблон для незеритового улучшения");
     }
 
     private ResourceRequests() {}
@@ -86,6 +93,7 @@ final class ResourceRequests {
         var match = REQUEST.matcher(query);
         if (!match.matches()) return null;
         String body = match.group(1).replaceAll("[!?.,;]", " ").strip();
+        if (body.startsWith("чтобы ") || body.equals("чтобы")) return null;
         var words = body.split("\\s+");
         if (Arrays.stream(words).anyMatch(CHAT::contains)) return null;
         StringBuilder cleaned = new StringBuilder();
@@ -111,16 +119,12 @@ final class ResourceRequests {
             if (!AMBIGUOUS.contains(name)) item = NAMES.get(name);
         }
         if (item == PocketGuide.ITEM) return error("Чтобы убрать меня в инвентарь, подойди и нажми Shift + ПКМ.");
+        if (item == null && body.matches(".*(?:шаблон|\\btemplate).*")) return error(
+            "Какой шаблон? Например, «дай шаблон Тишина» или «дай шаблон для незерита». Можно указать ID предмета.");
         if (item == null || item == Items.AIR) return error(
             "Уточни предмет: например, «дай 8 алмазов», «подари алмазную кирку» или «дай minecraft:oak_log». Можно использовать русское или английское название.");
         int maximum = new ItemStack(item).getMaxStackSize();
         return new Request(item, (int) Math.min(requested, maximum), requested > maximum, null);
-    }
-
-    static double willingness(Progress progress) {
-        if (progress.phase() != Progress.Phase.GUIDE && progress.phase() != Progress.Phase.STATIC) return 0;
-        return Math.clamp(0.75 + progress.trust() * 0.025
-            - (progress.phase() == Progress.Phase.STATIC ? 0.15 : 0), 0.10, 0.95);
     }
 
     static String grant(ServerPlayer player, Request request) {
@@ -148,6 +152,26 @@ final class ResourceRequests {
         if (previous != null && previous != item) AMBIGUOUS.add(key);
     }
 
+    private static void addTemplateNames(Item item, String russian, String english) {
+        LABELS.put(item, russian);
+        addName(russian, item);
+        addName(english, item);
+        String pattern = russian.replaceFirst("^Отделка ", "");
+        for (String prefix : new String[]{"шаблон ", "кузнечный шаблон "}) {
+            addName(prefix + russian, item);
+            addName(prefix + pattern, item);
+        }
+        addName(english + " smithing template", item);
+        addName(english + " template", item);
+        if (english.endsWith(" Armor Trim")) {
+            String trim = english.substring(0, english.length() - " Armor Trim".length());
+            addName(trim + " trim", item);
+            addName(trim + " template", item);
+            addName(trim + " smithing template", item);
+            addName("шаблон отделки брони " + pattern, item);
+        }
+    }
+
     private static void alias(Item item, String... aliases) {
         for (String alias : aliases) {
             String key = normalize(alias);
@@ -156,7 +180,7 @@ final class ResourceRequests {
         }
     }
 
-    private static String normalize(String name) {
+    static String normalize(String name) {
         return Arrays.stream(name.toLowerCase(Locale.ROOT).replace('ё', 'е').replace('_', ' ')
             .split("[^\\p{L}\\d]+"))
             .filter(word -> !word.isEmpty() && !FILLER.contains(word)).map(ResourceRequests::stem).sorted()

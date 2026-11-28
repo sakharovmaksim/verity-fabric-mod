@@ -54,6 +54,12 @@ record Progress(boolean enabled, int seconds, int trust, int retaliation, int hu
         return Phase.GUIDE;
     }
 
+    double favorWillingness() {
+        Phase current = phase();
+        if (current != Phase.GUIDE && current != Phase.STATIC) return 0;
+        return Math.clamp(0.75 + trust * 0.025 - (current == Phase.STATIC ? 0.15 : 0), 0.10, 0.95);
+    }
+
     Progress advance() {
         int nextSecond = Math.min(seconds + 1, MAX_SECONDS);
         int nextCooldown = Math.max(0, interactionCooldown - 1);
